@@ -10,7 +10,7 @@
 	</PropertyGroup>
 	<PropertyGroup>
 		<PackageId>MVVM.Generator</PackageId>
-		<Version>3.3.6</Version>
+		<Version>3.4.0</Version>
 		<PackageProjectUrl>https://github.com/PassivePicasso/MVVMGenerator</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<Title>MVVM.Generator</Title>
@@ -18,7 +18,6 @@
 		<Authors>James LaPenn</Authors>
 		<Description>Simple MVVM Generators for WPF</Description>
 		<Copyright>James LaPenn 2024</Copyright>
-		<BuildOutputTargetFolder>analyzers/dotnet/cs</BuildOutputTargetFolder>
 		<PackageOutputPath>$(OutputPath)</PackageOutputPath>
 	</PropertyGroup>
 	<ItemGroup>
@@ -30,10 +29,9 @@
 	  <None Remove="bin\Debug\netstandard2.0\\MVVM.Generator.dll" />
 	</ItemGroup>
 	<ItemGroup>
-		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="True" PackagePath="analyzers/dotnet/cs" Visible="false" />
-		<None Remove="bin\Debug\netstandard2.0\\MVVM.Generator.dll" />
-		<None Remove="bin\Debug\netstandard2.0\\MVVM.Generator.dll" />
-		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="True" PackagePath="lib/netstandard2.0" Visible="false" />
+		<None Include="$(OutputPath)\$(AssemblyName).*" Pack="True" PackagePath="analyzers/dotnet/cs" Visible="false" />
+		<None Include="$(OutputPath)\$(AssemblyName).*" Pack="True" PackagePath="lib/netstandard2.0" Visible="false" />
+		<None Remove="bin\Debug\netstandard2.0\\MVVM.Generator.*" />
 	</ItemGroup>
 
 	<ItemGroup>

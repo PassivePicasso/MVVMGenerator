@@ -4,6 +4,7 @@ using MVVM.Generator.Generators;
 
 using MVVMGenerator.Attributes;
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -34,40 +35,28 @@ namespace MVVMGenerator.Generators
 
             string methodCall;
             string canExecute;
+            string callerSource = symbol.IsStatic ? symbol.ContainingType.Name : "_owner";
 
-            if (symbol.IsStatic)
-            {
-                methodCall = $"\t\t\t\t{symbol.ContainingType.Name}.{symbol.Name}();";
-                canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
-                    ? $"\t\t\t\treturn {symbol.ContainingType.Name}.{canExecuteMethodName}();"
-                    : "\t\t\t\treturn true;";
-            }
-            else
-            {
-                methodCall = $"\t\t\t\t_owner.{symbol.Name}();";
-                canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
-                    ? $"\t\t\t\treturn _owner.{canExecuteMethodName}();"
-                    : "\t\t\t\treturn true;";
-            }
+            methodCall = $"\t\t\t\t{callerSource}.{symbol.Name}();";
+            canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
+                ? $"\t\t\t\treturn {callerSource}.{canExecuteMethodName}();"
+                : "\t\t\t\treturn true;";
 
-            if (symbol.Parameters.Length > 0)
+            if (symbol.Parameters.Length == 1)
             {
                 string parameterType = symbol.Parameters[0].Type.Name;
-                methodCall = symbol.IsStatic
-                    ? $$"""
+                methodCall = $$"""
                                 if(parameter is not {{parameterType}} typedParameter) return;
-                                {{symbol.ContainingType.Name}}.{{symbol.Name}}(typedParameter);
-                """
-                    : $$"""
-                                if(parameter is not {{parameterType}} typedParameter) return;
-                                _owner.{{symbol.Name}}(typedParameter);
+                                {{callerSource}}.{{symbol.Name}}(typedParameter);
                 """;
 
-                canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
-                    ? symbol.IsStatic
-                        ? $"\t\t\t\treturn {symbol.ContainingType.Name}.{canExecuteMethodName}(parameter);"
-                        : $"\t\t\t\treturn _owner.{canExecuteMethodName}(parameter);"
-                    : $"\t\t\t\treturn parameter is {parameterType};";
+                canExecute = !string.IsNullOrEmpty(canExecuteMethodName) 
+                           ? $$"""
+                                if(parameter is not {{parameterType}} typedParameter) return false;
+                                return {{callerSource}}.{{canExecuteMethodName}}(typedParameter);
+                """        
+                           : $"\t\t\t\treturn parameter is {parameterType};"
+                ;
             }
 
             var ownerField = symbol.IsStatic
@@ -109,21 +98,48 @@ namespace MVVMGenerator.Generators
 
         public string GetCanExecuteMethodName(IMethodSymbol methodSymbol)
         {
+            //System.Diagnostics.Debugger.Launch();
             // Find the AutoCommandAttribute on the method
             var attributeData = methodSymbol.GetAttributes()
                 .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoCommandAttribute));
 
             if (attributeData == null)
             {
-                return null; // Attribute not found
+                return string.Empty;
             }
 
-            // Find the named argument for CanExecuteMethod
-            var canExecuteMethodArg = attributeData.NamedArguments
-                .FirstOrDefault(kvp => kvp.Key == nameof(AutoCommandAttribute.CanExecuteMethod));
+            if(attributeData.ConstructorArguments.Length > 0)
+            {
+                var canExecuteMethodNode = attributeData.ConstructorArguments[0];
+                if (canExecuteMethodNode.Value is string canExecuteMethodName)
+                {
+                    var containingType = methodSymbol.ContainingType;
+                    var canExecuteMethod = containingType.GetMembers()
+                        .OfType<IMethodSymbol>()
+                        .FirstOrDefault(m => m.Name == canExecuteMethodName);
 
-            // Return the value as a string
-            return canExecuteMethodArg.Value.Value as string;
+                    if (canExecuteMethod == null)
+                    {
+                        throw new InvalidOperationException($"Method '{canExecuteMethodName}' not found on type '{containingType.Name}'.");
+                    }
+
+                    // Verify the number of parameters
+                    if (canExecuteMethod.Parameters.Length != methodSymbol.Parameters.Length)
+                    {
+                        throw new InvalidOperationException($"Method '{canExecuteMethodName}' has a different number of parameters than '{methodSymbol.Name}'.");
+                    }
+
+                    // Ensure the return type is bool
+                    if (canExecuteMethod.ReturnType.SpecialType != SpecialType.System_Boolean)
+                    {
+                        throw new InvalidOperationException($"Method '{canExecuteMethodName}' does not return a boolean.");
+                    }
+
+                    return canExecuteMethodName;
+                }
+            }
+
+            throw new InvalidOperationException("CanExecuteMethod named argument not found or invalid.");
         }
 
         string GetFieldName(IMethodSymbol symbol) => $$"""{{symbol.Name.Substring(0, 1).ToLower()}}{{symbol.Name.Substring(1)}}Command""";

@@ -5,7 +5,7 @@ namespace MVVMGenerator.Attributes
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
     public class AutoCommandAttribute : Attribute
     {
-        public string CanExecuteMethod { get; set; }
+        public string CanExecuteMethod { get; }
 
         public AutoCommandAttribute()
         {
