@@ -1,7 +1,11 @@
 ﻿using Microsoft.CodeAnalysis;
+
 using MVVM.Generator.Generators;
+
 using MVVMGenerator.Attributes;
+
 using System.Collections.Generic;
+using System.Linq;
 
 namespace MVVMGenerator.Generators
 {
@@ -26,47 +30,100 @@ namespace MVVMGenerator.Generators
             if (symbol.Parameters.Length > 1) return;
 
             var className = GetCommandClassName(symbol);
-            string methodCall = $"""
-                            _owner.{symbol.Name}();
-            """;
-            string canExecute = """
-                            return true;
-            """;
+            var canExecuteMethodName = GetCanExecuteMethodName(symbol);
+
+            string methodCall;
+            string canExecute;
+
+            if (symbol.IsStatic)
+            {
+                methodCall = $"\t\t\t\t{symbol.ContainingType.Name}.{symbol.Name}();";
+                canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
+                    ? $"\t\t\t\treturn {symbol.ContainingType.Name}.{canExecuteMethodName}();"
+                    : "\t\t\t\treturn true;";
+            }
+            else
+            {
+                methodCall = $"\t\t\t\t_owner.{symbol.Name}();";
+                canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
+                    ? $"\t\t\t\treturn _owner.{canExecuteMethodName}();"
+                    : "\t\t\t\treturn true;";
+            }
+
             if (symbol.Parameters.Length > 0)
             {
                 string parameterType = symbol.Parameters[0].Type.Name;
-                methodCall = $$"""
-                            if(parameter is not {{parameterType}} typedParameter) return;
-                            _owner.{{symbol.Name}}(typedParameter);
-            """;
-                canExecute = $"""
-                            return parameter is {parameterType};
-            """;
+                methodCall = symbol.IsStatic
+                    ? $$"""
+                                if(parameter is not {{parameterType}} typedParameter) return;
+                                {{symbol.ContainingType.Name}}.{{symbol.Name}}(typedParameter);
+                """
+                    : $$"""
+                                if(parameter is not {{parameterType}} typedParameter) return;
+                                _owner.{{symbol.Name}}(typedParameter);
+                """;
+
+                canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
+                    ? symbol.IsStatic
+                        ? $"\t\t\t\treturn {symbol.ContainingType.Name}.{canExecuteMethodName}(parameter);"
+                        : $"\t\t\t\treturn _owner.{canExecuteMethodName}(parameter);"
+                    : $"\t\t\t\treturn parameter is {parameterType};";
             }
 
+            var ownerField = symbol.IsStatic
+                ? """
+
+    """
+                : $$"""
+                readonly {{symbol.ContainingType.Name}} _owner;
+
+    """;
+
+            var constructor = $$"""
+                public {{className}}({{(symbol.IsStatic ? string.Empty : $"{symbol.ContainingType.Name} owner")}})
+                {
+                {{(symbol.IsStatic ? string.Empty : """
+                    _owner = owner;
+            """ )}}
+                }
+    """;
+
             definitions.Add($$"""
-                    public class {{className}} : ICommand
-                    {
-                        public event EventHandler CanExecuteChanged;
-                        
-                        readonly {{symbol.ContainingType.Name}} _owner;
+            public class {{className}} : ICommand
+            {
+                public event EventHandler CanExecuteChanged;
+    {{ownerField}}
+    {{constructor}}
+                public bool CanExecute(object? parameter) 
+                {
+    {{canExecute}}
+                }
 
-                        public {{className}}({{symbol.ContainingType.Name}} owner)
-                        {
-                            _owner = owner;
-                        }
+                public void Execute(object? parameter)
+                {
+    {{methodCall}} 
+                }
+            }
+    """);
+        }
 
-                        public bool CanExecute(object? parameter) 
-                        {
-            {{canExecute}}
-                        }
+        public string GetCanExecuteMethodName(IMethodSymbol methodSymbol)
+        {
+            // Find the AutoCommandAttribute on the method
+            var attributeData = methodSymbol.GetAttributes()
+                .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoCommandAttribute));
 
-                        public void Execute(object? parameter)
-                        {
-            {{methodCall}} 
-                        }
-                    }
-            """);
+            if (attributeData == null)
+            {
+                return null; // Attribute not found
+            }
+
+            // Find the named argument for CanExecuteMethod
+            var canExecuteMethodArg = attributeData.NamedArguments
+                .FirstOrDefault(kvp => kvp.Key == nameof(AutoCommandAttribute.CanExecuteMethod));
+
+            // Return the value as a string
+            return canExecuteMethodArg.Value.Value as string;
         }
 
         string GetFieldName(IMethodSymbol symbol) => $$"""{{symbol.Name.Substring(0, 1).ToLower()}}{{symbol.Name.Substring(1)}}Command""";
@@ -83,7 +140,7 @@ namespace MVVMGenerator.Generators
             var fieldName = GetFieldName(symbol);
             definitions.Add($$"""
                     [JsonIgnore]
-                    public ICommand {{symbol.Name}}Command => {{fieldName}} ??= new {{className}}(this);
+                    public ICommand {{symbol.Name}}Command => {{fieldName}} ??= new {{className}}({{(symbol.IsStatic ? string.Empty : "this")}});
             """);
         }
     }
