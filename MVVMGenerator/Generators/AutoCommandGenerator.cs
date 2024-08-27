@@ -1,12 +1,12 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+using Microsoft.CodeAnalysis;
 
 using MVVM.Generator.Generators;
 
 using MVVMGenerator.Attributes;
-
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace MVVMGenerator.Generators
 {
@@ -39,8 +39,12 @@ namespace MVVMGenerator.Generators
 
             methodCall = $"\t\t\t\t{callerSource}.{symbol.Name}();";
             canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
-                ? $"\t\t\t\treturn {callerSource}.{canExecuteMethodName}();"
-                : "\t\t\t\treturn true;";
+                ? $"""
+                                return {callerSource}.{canExecuteMethodName}();
+                """
+                : """
+                                return true;
+                """;
 
             if (symbol.Parameters.Length == 1)
             {
@@ -50,11 +54,11 @@ namespace MVVMGenerator.Generators
                                 {{callerSource}}.{{symbol.Name}}(typedParameter);
                 """;
 
-                canExecute = !string.IsNullOrEmpty(canExecuteMethodName) 
+                canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
                            ? $$"""
                                 if(parameter is not {{parameterType}} typedParameter) return false;
                                 return {{callerSource}}.{{canExecuteMethodName}}(typedParameter);
-                """        
+                """
                            : $"\t\t\t\treturn parameter is {parameterType};"
                 ;
             }
@@ -73,7 +77,7 @@ namespace MVVMGenerator.Generators
                 {
                 {{(symbol.IsStatic ? string.Empty : """
                     _owner = owner;
-            """ )}}
+            """)}}
                 }
     """;
 
@@ -98,8 +102,6 @@ namespace MVVMGenerator.Generators
 
         public string GetCanExecuteMethodName(IMethodSymbol methodSymbol)
         {
-            //System.Diagnostics.Debugger.Launch();
-            // Find the AutoCommandAttribute on the method
             var attributeData = methodSymbol.GetAttributes()
                 .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoCommandAttribute));
 
@@ -108,7 +110,7 @@ namespace MVVMGenerator.Generators
                 return string.Empty;
             }
 
-            if(attributeData.ConstructorArguments.Length > 0)
+            if (attributeData.ConstructorArguments.Length > 0)
             {
                 var canExecuteMethodNode = attributeData.ConstructorArguments[0];
                 if (canExecuteMethodNode.Value is string canExecuteMethodName)
@@ -139,7 +141,7 @@ namespace MVVMGenerator.Generators
                 }
             }
 
-            throw new InvalidOperationException("CanExecuteMethod named argument not found or invalid.");
+            return string.Empty;
         }
 
         string GetFieldName(IMethodSymbol symbol) => $$"""{{symbol.Name.Substring(0, 1).ToLower()}}{{symbol.Name.Substring(1)}}Command""";

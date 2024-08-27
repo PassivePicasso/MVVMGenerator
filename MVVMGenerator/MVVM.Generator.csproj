@@ -10,7 +10,7 @@
 	</PropertyGroup>
 	<PropertyGroup>
 		<PackageId>MVVM.Generator</PackageId>
-		<Version>3.4.0</Version>
+		<Version>3.4.1</Version>
 		<PackageProjectUrl>https://github.com/PassivePicasso/MVVMGenerator</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<Title>MVVM.Generator</Title>
@@ -21,17 +21,13 @@
 		<PackageOutputPath>$(OutputPath)</PackageOutputPath>
 	</PropertyGroup>
 	<ItemGroup>
+		<None Include="$(OutputPath)\$(AssemblyName).*" Pack="True" PackagePath="analyzers/dotnet/cs" Visible="false" />
+		<None Include="$(OutputPath)\$(AssemblyName).*" Pack="True" PackagePath="lib/netstandard2.0" Visible="false" />
+	</ItemGroup>
+	<ItemGroup>
 	  <Compile Remove="bin\**" />
 	  <EmbeddedResource Remove="bin\**" />
 	  <None Remove="bin\**" />
-	</ItemGroup>
-	<ItemGroup>
-	  <None Remove="bin\Debug\netstandard2.0\\MVVM.Generator.dll" />
-	</ItemGroup>
-	<ItemGroup>
-		<None Include="$(OutputPath)\$(AssemblyName).*" Pack="True" PackagePath="analyzers/dotnet/cs" Visible="false" />
-		<None Include="$(OutputPath)\$(AssemblyName).*" Pack="True" PackagePath="lib/netstandard2.0" Visible="false" />
-		<None Remove="bin\Debug\netstandard2.0\\MVVM.Generator.*" />
 	</ItemGroup>
 
 	<ItemGroup>
