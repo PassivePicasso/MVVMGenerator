@@ -1,10 +1,20 @@
-﻿using MVVMGenerator.Attributes;
+﻿using System.Text.Json.Serialization;
+using System.Windows;
+
+using MVVMGenerator.Attributes;
+
+using Newtonsoft.Json.Converters;
 
 namespace TestProject
 {
     public partial class TestViewModel
     {
-        [AutoNotify] public bool isOpen;
+        [JsonConverter(typeof(StringEnumConverter))]
+        [AutoNotify] private Visibility visibility = Visibility.Visible;
+
+        [AutoNotify] private Dictionary<string?, byte[]>? dataDictionary;
+        [AutoNotify] private byte[] data;
+        [AutoNotify] private bool isOpen;
 
         [AutoCommand(nameof(CanExecuteClose))]
         public void Close() => IsOpen = false;
@@ -21,13 +31,11 @@ namespace TestProject
         [AutoCommand]
         public void ExecuteStuff()
         {
-
         }
 
         [AutoCommand]
         public static void TestStatic()
         {
-
         }
     }
 }

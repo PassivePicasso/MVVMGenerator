@@ -2,7 +2,9 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+
 using MVVM.Generator.Generators;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -174,8 +176,12 @@ namespace MVVMGenerator.Generators
         string Render(IEnumerable<string> strings) => strings.Any()
                                                     ? strings.Distinct().Aggregate(appendLines)
                                                     : string.Empty;
-        string RenderInterfaces(IEnumerable<string> interfaces) => interfaces.Any()
-                                                                 ? interfaces.Distinct().Aggregate(appendInterfaces)
-                                                                 : string.Empty;
+        string RenderInterfaces(IEnumerable<string> interfaces)
+        {
+            var frozenInterfaces = interfaces.Distinct().ToArray();
+            return frozenInterfaces.Length > 0 
+                 ? frozenInterfaces.Aggregate(appendInterfaces)
+                 : string.Empty;
+        }
     }
 }
