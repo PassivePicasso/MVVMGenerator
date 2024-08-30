@@ -1,4 +1,6 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.Text.Json.Serialization;
 using System.Windows;
 
 using MVVMGenerator.Attributes;
@@ -15,6 +17,13 @@ namespace TestProject
         [AutoNotify] private Dictionary<string?, byte[]>? dataDictionary;
         [AutoNotify] private byte[] data;
         [AutoNotify] private bool isOpen;
+        
+        [AutoNotify(CollectionChangedHandlerName = nameof(OnCollectionChanged))] 
+        private ObservableCollection<string> collection = new ObservableCollection<string>();
+
+        public void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+        {
+        }
 
         [AutoCommand(nameof(CanExecuteClose))]
         public void Close() => IsOpen = false;
