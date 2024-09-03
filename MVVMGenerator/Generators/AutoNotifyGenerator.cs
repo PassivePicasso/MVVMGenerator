@@ -16,6 +16,10 @@ namespace MVVMGenerator.Generators
     [Generator]
     internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, AutoNotifyAttribute>
     {
+        private const string AttrUsageName = nameof(AttributeUsageAttribute);
+        private const string AttrTargetName = nameof(AttributeTargets);
+        private const string AttrTypeName = nameof(AutoNotifyAttribute);
+        private const string INCCName = nameof(INotifyCollectionChanged);
         protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol, SemanticModel model)
         {
             usings.Add("using System.ComponentModel;");
@@ -27,11 +31,13 @@ namespace MVVMGenerator.Generators
 
             foreach (var fieldAttribute in fieldSymbol.GetAttributes())
             {
-                if (fieldAttribute.AttributeClass.Name == nameof(AutoNotifyAttribute)) continue;
-                //Determine if Attribute can be applied to a Property by acquiring the AttributeUsageAttribute and checking its configuration
-                var attributeClassAttributes = fieldAttribute.AttributeClass.GetAttributes();
-                var usageAttributeData = attributeClassAttributes.First(aca => aca.AttributeClass.Name == nameof(AttributeUsageAttribute));
-                var targets = usageAttributeData.ConstructorArguments.First(ad => ad.Type.Name == nameof(AttributeTargets));
+                if (fieldAttribute.AttributeClass.Name == AttrTypeName) continue;
+                //Determine if Attribute can be applied to a Property by acquiring
+                //the AttributeUsageAttribute and checking its configuration
+                var targets = fieldAttribute.AttributeClass.GetAttributes()
+                    .First(aca => aca.AttributeClass.Name == AttrUsageName).ConstructorArguments
+                    .First(ad => ad.Type.Name == AttrTargetName);
+
                 var result = (AttributeTargets)(int)targets.Value;
                 var validOnProperty = result.HasFlag(AttributeTargets.Property);
                 //Add using statement for transferred attributes
@@ -39,76 +45,124 @@ namespace MVVMGenerator.Generators
                     if (fieldAttribute.AttributeClass?.ContainingNamespace != null)
                         usings.Add($"using {fieldAttribute.AttributeClass.ContainingNamespace};");
             }
+
+            //Add usings for generic type arguments
             if (fieldSymbol.Type is INamedTypeSymbol namedTypeSymbol && namedTypeSymbol.IsGenericType)
                 foreach (var typeArgSymbol in namedTypeSymbol.TypeArguments)
                     if (typeArgSymbol?.ContainingNamespace != null)
                         usings.Add($"using {typeArgSymbol.ContainingNamespace};");
 
-            var isINCC = fieldSymbol.Type.AllInterfaces.Any(i => i.Name == nameof(INotifyCollectionChanged));
-            var collectionChangedHandler = isINCC ? GetCollectionChangedHandlerName(fieldSymbol) : null;
-            var hasChangeHandler = !string.IsNullOrEmpty(collectionChangedHandler);
-            if (isINCC && hasChangeHandler)
+            //Add using for NotifyCollectionChangedEventHandler if CollectionChangedHandlerName is set
+            var attributeData = fieldSymbol.GetAttributes()
+                .FirstOrDefault(ad => ad.AttributeClass?.Name == AttrTypeName);
+            var hasChangeHandler = attributeData?.NamedArguments
+                .Any(na => na.Key == nameof(AutoNotifyAttribute.CollectionChangedHandlerName)) ?? false;
+            var isNotifyingCollection = fieldSymbol.Type.AllInterfaces.Any(i => i.Name == INCCName);
+            if (isNotifyingCollection && hasChangeHandler)
                 usings.Add($"using System.Collections.Specialized;");
         }
         protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol, SemanticModel model)
         {
             var name = fieldSymbol.Name;
             var type = TypeHelper.GetTypeName(fieldSymbol.Type);
+            string defines = string.Empty;
+            string prefix = string.Empty;
+            string suffix = string.Empty;
+            string propertyAttributesString = ReconstructAttributes(fieldSymbol);
 
-            // Check if the field type implements INotifyCollectionChanged
-            // Check if AutoNotifyAttribute has a CollectionChangedHandlerName property
-            var isINCC = fieldSymbol.Type.AllInterfaces.Any(i => i.Name == nameof(INotifyCollectionChanged));
-            var collectionChangedHandlerName = isINCC ? GetCollectionChangedHandlerName(fieldSymbol) : null;
-            var hasChangeHandler = !string.IsNullOrEmpty(collectionChangedHandlerName);
-            if (isINCC && hasChangeHandler)
+            var attributeData = fieldSymbol.GetAttributes()
+                .FirstOrDefault(ad => ad.AttributeClass?.Name == AttrTypeName);
+
+            if ((attributeData?.NamedArguments.Length ?? 0) > 0)
             {
-                string handlerFieldName = $"_{name}CollectionChangedHandler";
-                string propertyAttributesString = ReconstructAttributes(fieldSymbol);
-
-                // Modify the property setter to manage the event handler registration
-                properties.Add($$"""
-                            private NotifyCollectionChangedEventHandler {{handlerFieldName}};
-                            {{propertyAttributesString}}
-                            public {{type}} {{name.Substring(0, 1).ToUpper()}}{{name.Substring(1)}}
+                foreach (var namedArg in attributeData.NamedArguments)
+                    switch (namedArg.Key)
+                    {
+                        case nameof(AutoNotifyAttribute.PropertyChangedHandlerName):
                             {
-                                get => {{name}};
-                                set
-                                {
-                                    if ({{name}} != null && {{handlerFieldName}} != null)
-                                    {
-                                        ((INotifyCollectionChanged){{name}}).CollectionChanged -= {{handlerFieldName}};
-                                    }
+                                var methodName = namedArg.Value.Value as string;
+                                var containingType = fieldSymbol.ContainingType;
+                                var matchedMethodSymbol = containingType.GetMembers()
+                                    .OfType<IMethodSymbol>()
+                                    .FirstOrDefault(m => m.Name == methodName);
 
-                                    {{name}} = value;
-                                    if ({{name}} != null && {{handlerFieldName}} != null)
-                                    {
-                                        {{handlerFieldName}} = {{collectionChangedHandlerName}};
-                                        ((INotifyCollectionChanged){{name}}).CollectionChanged += {{handlerFieldName}};
-                                    }
-                                    OnPropertyChanged();
-                                }
+                                ValidateEventHandler(methodName, containingType, matchedMethodSymbol);
+
+                                string handlerFieldName = $"_{name}ChangedHandler";
+                                defines = $$"""
+        private EventHandler {{handlerFieldName}};
+""";
+
+                                suffix = $$"""
+
+                {{handlerFieldName}} ??= {{methodName}};
+                {{handlerFieldName}}.Invoke(this, EventArgs.Empty);
+""";
                             }
-                    """);
-            }
-            else
-            {
-                var propertyAttributesString = ReconstructAttributes(fieldSymbol);
-                // Existing logic for properties that do not implement INotifyCollectionChanged
-                properties.Add($$"""
-                            {{propertyAttributesString}}
-                            public {{type}} {{name.Substring(0, 1).ToUpper()}}{{name.Substring(1)}}
+                            break;
+                        case nameof(AutoNotifyAttribute.CollectionChangedHandlerName):
                             {
-                                get => {{name}};
-                                set
-                                {
-                                    {{name}} = value;
-                                    OnPropertyChanged();
-                                }
+                                var methodName = namedArg.Value.Value as string;
+                                var containingType = fieldSymbol.ContainingType;
+                                var matchedMethodSymbol = containingType.GetMembers()
+                                    .OfType<IMethodSymbol>()
+                                    .FirstOrDefault(m => m.Name == methodName);
+
+                                ValidateCollectionChangedHandler(methodName, containingType, matchedMethodSymbol);
+
+                                string handlerFieldName = $"_{name}CollectionChangedHandler";
+                                defines = $$"""
+        private NotifyCollectionChangedEventHandler {{handlerFieldName}};
+""";
+                                prefix = $$"""
+
+                if ({{name}} != null && {{handlerFieldName}} != null)
+                {
+                    (({{INCCName}}){{name}}).CollectionChanged -= {{handlerFieldName}};
+                }
+""";
+                                suffix = $$"""
+
+                if ({{name}} != null && {{handlerFieldName}} != null)
+                {
+                    {{handlerFieldName}} = {{methodName}};
+                    (({{INCCName}}){{name}}).CollectionChanged += {{handlerFieldName}};
+                }
+""";
                             }
-                    """);
+                            break;
+                    }
             }
 
+            // Existing logic for properties that do not implement INotifyCollectionChanged
+            properties.Add($$"""
+{{defines}}{{propertyAttributesString}}
+        public {{type}} {{name.Substring(0, 1).ToUpper()}}{{name.Substring(1)}}
+        {
+            get => {{name}};
+            set
+            {{{prefix}}
+                {{name}} = value;{{suffix}}
+                OnPropertyChanged();
+            }
         }
+""");
+        }
+        protected override void AddInterfaceImplementations(List<string> impls, IFieldSymbol fieldSymbol, SemanticModel model)
+        {
+            impls.Add($$"""
+        public event PropertyChangedEventHandler? PropertyChanged;
+        void OnPropertyChanged([CallerMemberName] string? propertyName = null) 
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+""");
+        }
+        protected override void AddInterfaces(List<string> interfaces, IFieldSymbol fieldSymbol, SemanticModel model)
+        {
+            interfaces.Add("INotifyPropertyChanged");
+        }
+
         private static string ReconstructAttributes(IFieldSymbol fieldSymbol)
         {
             List<string> propertyAttributes = new();
@@ -116,12 +170,12 @@ namespace MVVMGenerator.Generators
             {
                 var attributeClass = fieldAttribute.AttributeClass;
                 var attributeClassName = attributeClass.Name;
-                if (attributeClassName == nameof(AutoNotifyAttribute)) continue;
+                if (attributeClassName == AttrTypeName) continue;
 
                 var attrClassAttributes = attributeClass.GetAttributes();
 
-                var usageAttributeData = attrClassAttributes.First(aca => aca.AttributeClass.Name == nameof(AttributeUsageAttribute));
-                var targets = usageAttributeData.ConstructorArguments.First(ad => ad.Type.Name == nameof(AttributeTargets));
+                var usageAttributeData = attrClassAttributes.First(aca => aca.AttributeClass.Name == AttrUsageName);
+                var targets = usageAttributeData.ConstructorArguments.First(ad => ad.Type.Name == AttrTargetName);
                 var result = (AttributeTargets)(int)targets.Value;
 
                 if (result.HasFlag(AttributeTargets.Property))
@@ -143,79 +197,55 @@ namespace MVVMGenerator.Generators
                     propertyAttributes.Add(attributeString);
                 }
             }
-            string propertyAttributesString = string.Empty;
-            if (propertyAttributes.Any())
-                propertyAttributesString = $"[{(propertyAttributes.Aggregate((a, b) => $"{a}, {b}"))}]";
-            return propertyAttributesString;
-        }
-        protected override void AddInterfaceImplementations(List<string> impls, IFieldSymbol fieldSymbol, SemanticModel model)
-        {
-            impls.Add($$"""
-                           public event PropertyChangedEventHandler? PropertyChanged;
-                           void OnPropertyChanged([CallerMemberName] string? propertyName = null) 
-                           {
-                                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-                           }
-                   """);
-        }
-        protected override void AddInterfaces(List<string> interfaces, IFieldSymbol fieldSymbol, SemanticModel model)
-        {
-            interfaces.Add("INotifyPropertyChanged");
-        }
-        public string GetCollectionChangedHandlerName(IFieldSymbol fieldSymbol)
-        {
-            var attributeData = fieldSymbol.GetAttributes()
-                .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoNotifyAttribute));
 
-            if (attributeData == null)
-            {
-                return string.Empty;
-            }
-
-            if (attributeData.NamedArguments.Length > 0)
-            {
-                foreach (var namedArg in attributeData.NamedArguments)
-                {
-                    switch (namedArg.Key)
-                    {
-                        case nameof(AutoNotifyAttribute.CollectionChangedHandlerName):
-                            {
-                                var methodName = namedArg.Value.Value as string;
-                                var containingType = fieldSymbol.ContainingType;
-                                var matchedMethodSymbol = containingType.GetMembers()
-                                    .OfType<IMethodSymbol>()
-                                    .FirstOrDefault(m => m.Name == methodName);
-                                if (matchedMethodSymbol == null)
-                                {
-                                    throw new InvalidOperationException($"Method '{methodName}' not found on type '{containingType.Name}'.");
-                                }
-                                //Ensure matched symbol has the correct method signature for an NotifyCollectionChangedEventHandler
-                                // it should return void and take two parameters, object and NotifyCollectionChangedEventArgs
-                                if (matchedMethodSymbol.ReturnType.SpecialType != SpecialType.System_Void)
-                                {
-                                    throw new InvalidOperationException($"Method '{methodName}' does not return void.");
-                                }
-                                if (matchedMethodSymbol.Parameters.Length != 2)
-                                {
-                                    throw new InvalidOperationException($"Method '{methodName}' does not have the correct number of parameters.");
-                                }
-                                if (matchedMethodSymbol.Parameters[0].Type.SpecialType != SpecialType.System_Object)
-                                {
-                                    throw new InvalidOperationException($"Method '{methodName}' does not have the correct first parameter type.");
-                                }
-                                if (matchedMethodSymbol.Parameters[1].Type.Name != nameof(NotifyCollectionChangedEventArgs))
-                                {
-                                    throw new InvalidOperationException($"Method '{methodName}' does not have the correct second parameter type.");
-                                }
-
-                                return methodName;
-                            }
-                    }
-                }
-            }
-
+            if (propertyAttributes.Count > 0)
+                return $"""
+        [{(propertyAttributes.Aggregate((a, b) => $"{a}, {b}"))}]
+""";
             return string.Empty;
         }
-    }
+        private static void ValidateEventHandler(string methodName, INamedTypeSymbol containingType, IMethodSymbol matchedMethodSymbol)
+        {
+            if (matchedMethodSymbol == null)
+                throw new InvalidOperationException($"Method '{methodName}' not found on type '{containingType.Name}'.");
 
+            if (matchedMethodSymbol.ReturnType.SpecialType != SpecialType.System_Void)
+                throw new InvalidOperationException($"Method '{methodName}' does not return void.");
+
+            if (matchedMethodSymbol.Parameters.Length != 2)
+                throw new InvalidOperationException($"Method '{methodName}' does not have the correct number of parameters.");
+
+            var firstParameter = matchedMethodSymbol.Parameters[0];
+            var secondParameter = matchedMethodSymbol.Parameters[1];
+
+            if (firstParameter.Type.SpecialType != SpecialType.System_Object)
+                throw new InvalidOperationException($"Method '{methodName}' does not have the correct first parameter type.");
+
+            if (IsOrDescendedFrom<EventArgs>(methodName, secondParameter)) return;
+
+            throw new InvalidOperationException($"Parameter '{secondParameter.Name}' of Method '{methodName}' is not 'EventArgs'.");
+        }
+        private static void ValidateCollectionChangedHandler(string methodName, INamedTypeSymbol containingType, IMethodSymbol matchedMethodSymbol)
+        {
+            var parameter = matchedMethodSymbol.Parameters[1];
+            ValidateEventHandler(methodName, containingType, matchedMethodSymbol);
+            if (!IsOrDescendedFrom<NotifyCollectionChangedEventArgs>(methodName, parameter))
+                throw new InvalidOperationException(
+                    $"Parameter '{parameter.Name}' of Method '{methodName}' is not 'NotifyCollectionChangedEventArgs'."
+                    );
+        }
+        private static bool IsOrDescendedFrom<T>(string methodName, IParameterSymbol parameter)
+        {
+            var eventArgsType = parameter.Type;
+            while (eventArgsType != null)
+            {
+                if (eventArgsType.Name == typeof(T).Name)
+                {
+                    return true;
+                }
+                eventArgsType = eventArgsType.BaseType;
+            }
+            return false;
+        }
+    }
 }

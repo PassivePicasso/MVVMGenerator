@@ -16,8 +16,15 @@ namespace TestProject
 
         [AutoNotify] private Dictionary<string?, byte[]>? dataDictionary;
         [AutoNotify] private byte[] data;
-        [AutoNotify] private bool isOpen;
         
+        [AutoNotify(PropertyChangedHandlerName = nameof(IsOpenedChanged))] 
+        private bool isOpen;
+
+        private void IsOpenedChanged(object? sender, EventArgs args)
+        {
+            
+        }
+
         [AutoNotify(CollectionChangedHandlerName = nameof(OnCollectionChanged))] 
         private ObservableCollection<string> collection = new ObservableCollection<string>();
 

@@ -6,5 +6,6 @@ namespace MVVMGenerator.Attributes
     public class AutoNotifyAttribute : Attribute
     {
         public string CollectionChangedHandlerName { get; set; }
+        public string PropertyChangedHandlerName { get; set; }
     }
 }
