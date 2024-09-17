@@ -3,6 +3,8 @@ using System.Collections.Specialized;
 using System.Text.Json.Serialization;
 using System.Windows;
 
+using EnumTypes;
+
 using MVVMGenerator.Attributes;
 
 using Newtonsoft.Json.Converters;
@@ -10,14 +12,10 @@ using Newtonsoft.Json.Converters;
 
 namespace TestProject
 {
-    public class OtherType
-    {
-        public enum TestEnum { None, One, Two }
-    }
     public partial class TestViewModel
     {
         [AutoNotify]
-        private OtherType.TestEnum testEnumValue;
+        private OtherType.TestEnum[] testEnumValues;
 
         [JsonConverter(typeof(StringEnumConverter))]
         [AutoNotify]

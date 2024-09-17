@@ -27,6 +27,11 @@ namespace MVVM.Generator.Utilities
                     AddStaticUsingForContainingType(usings, namedTypeSymbol.ContainingType);
                 }
             }
+            else if (typeSymbol is IArrayTypeSymbol arrayTypeSymbol)
+            {
+                // Handle array types
+                AddNamespaceUsings(usings, arrayTypeSymbol.ElementType);
+            }
         }
 
         private static void AddStaticUsingForContainingType(List<string> usings, INamedTypeSymbol containingType)

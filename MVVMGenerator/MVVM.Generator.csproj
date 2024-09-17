@@ -14,7 +14,7 @@
 	</PropertyGroup>
 	<PropertyGroup>
 		<PackageId>MVVM.Generator</PackageId>
-		<Version>3.8.0</Version>
+		<Version>3.9.0</Version>
 		<PackageProjectUrl>https://github.com/PassivePicasso/MVVMGenerator</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<Title>MVVM.Generator</Title>
