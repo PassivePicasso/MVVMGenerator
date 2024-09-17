@@ -7,25 +7,34 @@ using MVVMGenerator.Attributes;
 
 using Newtonsoft.Json.Converters;
 
+
 namespace TestProject
 {
+    public class OtherType
+    {
+        public enum TestEnum { None, One, Two }
+    }
     public partial class TestViewModel
     {
+        [AutoNotify]
+        private OtherType.TestEnum testEnumValue;
+
         [JsonConverter(typeof(StringEnumConverter))]
-        [AutoNotify] private Visibility visibility = Visibility.Visible;
+        [AutoNotify]
+        private Visibility visibility = Visibility.Visible;
 
-        [AutoNotify] private Dictionary<string?, byte[]>? dataDictionary;
+        [AutoNotify(SetterAccess = Access.Private)]
+        private Dictionary<string?, byte[]>? dataDictionary;
+
         [AutoNotify] private byte[] data;
-        
-        [AutoNotify(PropertyChangedHandlerName = nameof(IsOpenedChanged))] 
-        private bool isOpen;
 
+        [AutoNotify(PropertyChangedHandlerName = nameof(IsOpenedChanged))]
+        private bool isOpen;
         private void IsOpenedChanged(object? sender, EventArgs args)
         {
-            
         }
 
-        [AutoNotify(CollectionChangedHandlerName = nameof(OnCollectionChanged))] 
+        [AutoNotify(CollectionChangedHandlerName = nameof(OnCollectionChanged))]
         private ObservableCollection<string> collection = new ObservableCollection<string>();
 
         public void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -37,7 +46,7 @@ namespace TestProject
         public bool CanExecuteClose() => IsOpen;
 
 
-        [AutoCommand(nameof(CanTest))]
+        [AutoCommand]
         public void Test(int input)
         {
         }

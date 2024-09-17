@@ -3,7 +3,7 @@ using System.Linq;
 
 using Microsoft.CodeAnalysis;
 
-namespace MVVM.Generator
+namespace MVVM.Generator.Utilities
 {
     internal static class TypeHelper
     {

@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "MVVM.Generator": {
+      "commandName": "Project"
+    },
+    "DebugGenerator": {
+      "commandName": "DebugRoslynComponent",
+      "targetProject": "..\\TestProject\\TestProject.csproj"
+    }
+  }
+}

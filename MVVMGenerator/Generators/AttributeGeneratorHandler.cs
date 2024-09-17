@@ -40,14 +40,14 @@ namespace MVVM.Generator.Generators
 
             foreach (var tSymbol in symbols.OfType<Symbol>())
             {
-                AddUsings/*                  */(generator.usings,/*          */tSymbol, model);
-                AddInterfaces/*              */(generator.interfaces,/*      */tSymbol, model);
-                AddNestedClasses/*           */(generator.nestedClasses, tSymbol, model);
-                AddInterfaceImplementations/**/(generator.interfaceImplementations,/*          */tSymbol, model);
-                AddFields/*                  */(generator.fields,/*          */tSymbol, model);
-                AddProperties/*              */(generator.properties,/*      */tSymbol, model);
-                AddStaticFields/*            */(generator.staticFields,/*    */tSymbol, model);
-                AddStaticProperties/*        */(generator.staticProperties,/**/tSymbol, model);
+                AddUsings/*                  */(generator.usings,/*                  */tSymbol, model);
+                AddInterfaces/*              */(generator.interfaces,/*              */tSymbol, model);
+                AddNestedClasses/*           */(generator.nestedClasses,/*           */tSymbol, model);
+                AddInterfaceImplementations/**/(generator.interfaceImplementations,/**/tSymbol, model);
+                AddFields/*                  */(generator.fields,/*                  */tSymbol, model);
+                AddProperties/*              */(generator.properties,/*              */tSymbol, model);
+                AddStaticFields/*            */(generator.staticFields,/*            */tSymbol, model);
+                AddStaticProperties/*        */(generator.staticProperties,/*        */tSymbol, model);
             }
         }
 

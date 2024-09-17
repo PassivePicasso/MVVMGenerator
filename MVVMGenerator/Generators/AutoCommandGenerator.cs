@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 
 using MVVM.Generator.Generators;
+using MVVM.Generator.Utilities;
 
 using MVVMGenerator.Attributes;
 
@@ -15,12 +16,11 @@ namespace MVVMGenerator.Generators
     {
         protected override void AddUsings(List<string> usings, IMethodSymbol symbol, SemanticModel model)
         {
-            usings.Add("using System;");
             usings.Add("using System.Windows.Input;");
             usings.Add("using System.Text.Json.Serialization;");
             if (symbol.Parameters.Length > 0)
             {
-                usings.Add($"using {symbol.Parameters[0].Type.ContainingNamespace};");
+                NamespaceExtractor.AddNamespaceUsings(usings, symbol.Parameters[0].Type);
             }
         }
 

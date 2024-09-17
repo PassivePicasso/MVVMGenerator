@@ -1,7 +1,11 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using System.Collections.Generic;
+
+using Microsoft.CodeAnalysis;
+
 using MVVM.Generator.Generators;
+using MVVM.Generator.Utilities;
+
 using MVVMGenerator.Attributes;
-using System.Collections.Generic;
 
 namespace MVVMGenerator.Generators
 {
@@ -11,8 +15,7 @@ namespace MVVMGenerator.Generators
         protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol, SemanticModel model)
         {
             usings.Add("using Avalonia;");
-            //Add field type's namespace to usings
-            usings.Add($"using {fieldSymbol.Type.ContainingNamespace};");
+            NamespaceExtractor.AddNamespaceUsings(usings, fieldSymbol.Type);
         }
 
         string GetName(IFieldSymbol fieldSymbol)
