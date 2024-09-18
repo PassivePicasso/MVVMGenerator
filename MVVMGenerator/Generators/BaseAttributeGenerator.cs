@@ -3,15 +3,13 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-using MVVM.Generator.Generators;
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
 
-namespace MVVMGenerator.Generators
+namespace MVVM.Generator.Generators
 {
     internal static class GenDebugger
     {
@@ -148,7 +146,7 @@ namespace MVVMGenerator.Generators
             usings.RemoveAll(usng => usng.Contains(classUsing));
             usings.Sort();
 
-            string derivationSeparator/*     */= (interfaces.Any() ? " : " : string.Empty);
+            string derivationSeparator/*     */= interfaces.Any() ? " : " : string.Empty;
             string renderedInterfaceList/*   */= RenderInterfaces(interfaces);
             string renderedUsings/*          */= Render(usings);
             string renderedNestedClasses/*   */= Render(nestedClasses);
@@ -183,7 +181,7 @@ namespace MVVMGenerator.Generators
         string RenderInterfaces(IEnumerable<string> interfaces)
         {
             var frozenInterfaces = interfaces.Distinct().ToArray();
-            return frozenInterfaces.Length > 0 
+            return frozenInterfaces.Length > 0
                  ? frozenInterfaces.Aggregate(appendInterfaces)
                  : string.Empty;
         }

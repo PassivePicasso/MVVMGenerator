@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MVVMGenerator.Attributes;
+namespace MVVM.Generator.Attributes;
 
 public enum Access { Private, Internal, Protected, Public }
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]

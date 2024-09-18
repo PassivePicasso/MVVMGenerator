@@ -8,12 +8,10 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
 using MVVM.Generator;
-using MVVM.Generator.Generators;
+using MVVM.Generator.Attributes;
 using MVVM.Generator.Utilities;
 
-using MVVMGenerator.Attributes;
-
-namespace MVVMGenerator.Generators;
+namespace MVVM.Generator.Generators;
 
 
 [Generator]
@@ -220,7 +218,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
         if (propertyAttributes.Count > 0)
             return $"""
-    [{(propertyAttributes.Aggregate((a, b) => $"{a}, {b}"))}]
+    [{propertyAttributes.Aggregate((a, b) => $"{a}, {b}")}]
 """;
         return string.Empty;
     }

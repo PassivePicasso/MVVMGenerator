@@ -4,12 +4,10 @@ using System.Linq;
 
 using Microsoft.CodeAnalysis;
 
-using MVVM.Generator.Generators;
+using MVVM.Generator.Attributes;
 using MVVM.Generator.Utilities;
 
-using MVVMGenerator.Attributes;
-
-namespace MVVMGenerator.Generators
+namespace MVVM.Generator.Generators
 {
     [Generator]
     internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, AutoCommandAttribute>

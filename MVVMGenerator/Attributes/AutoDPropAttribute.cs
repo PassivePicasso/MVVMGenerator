@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MVVMGenerator.Attributes
+namespace MVVM.Generator.Attributes
 {
     [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
     public class AutoDPropAttribute : Attribute
