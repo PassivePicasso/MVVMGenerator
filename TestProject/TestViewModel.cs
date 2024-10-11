@@ -5,7 +5,7 @@ using System.Windows;
 
 using EnumTypes;
 
-using MVVMGenerator.Attributes;
+using MVVM.Generator.Attributes;
 
 using Newtonsoft.Json.Converters;
 
@@ -42,6 +42,12 @@ namespace TestProject
         [AutoCommand(nameof(CanExecuteClose))]
         public void Close() => IsOpen = false;
         public bool CanExecuteClose() => IsOpen;
+
+        //[AutoCommand]
+        //private void BrokenTest()
+        //{
+
+        //}
 
 
         [AutoCommand]

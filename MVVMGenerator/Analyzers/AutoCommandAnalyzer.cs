@@ -13,7 +13,7 @@ namespace MVVM.Generator.Analyzers
     {
         public const string DiagnosticId = "AutoCommandAnalyzer";
         private static readonly LocalizableString Title = "AutoCommandAttribute usage";
-        private static readonly LocalizableString MessageFormat = "The method '{0}' is not public but has the AutoCommandAttribute";
+        private static readonly LocalizableString MessageFormat = "AutoCommand can only be applied to public methods";
         private static readonly LocalizableString Description = "Methods with AutoCommandAttribute must be public.";
         private const string Category = "Usage";
 
