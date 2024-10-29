@@ -37,8 +37,10 @@ public class AutoCommandCodeFixProvider : CodeFixProvider
         var diagnosticSpan = diagnostic.Location.SourceSpan;
 
         var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-
-        var declaration = root.FindToken(diagnosticSpan.Start).Parent.AncestorsAndSelf().OfType<MethodDeclarationSyntax>().First();
+        var parent = root?.FindToken(diagnosticSpan.Start).Parent;
+        var declaration = parent?.AncestorsAndSelf().OfType<MethodDeclarationSyntax>().First();
+        if (declaration == null)
+            return;
 
         context.RegisterCodeFix(
             CodeAction.Create(
@@ -57,6 +59,8 @@ public class AutoCommandCodeFixProvider : CodeFixProvider
         var newMethodDecl = methodDecl.WithModifiers(newModifiers);
 
         var root = await document.GetSyntaxRootAsync(cancellationToken);
+        if(root == null) return document.Project.Solution;
+
         var newRoot = root.ReplaceNode(methodDecl, newMethodDecl);
 
         return document.Project.Solution.WithDocumentSyntaxRoot(document.Id, newRoot);

@@ -31,7 +31,7 @@ namespace MVVM.Generator.Generators
         protected static readonly Func<string, string, string> appendLines = (a, b) => $"{a}\r\n{b}";
         protected static readonly Func<string, string, string> appendInterfaces = (a, b) => $"{a}, {b}";
 
-        IAttributeGenerator[] generators;
+        IAttributeGenerator[]? generators;
         internal List<string> interfaces/*      */= new();
         internal List<string> usings/*          */= new();
         internal List<string> nestedClasses/*   */= new();
@@ -96,8 +96,9 @@ namespace MVVM.Generator.Generators
                 {
                     try
                     {
+                        if (classSymbol == null) continue;
                         var generatedCode = GeneratePartialClass(classSymbol, model);
-                        if (string.IsNullOrEmpty(generatedCode)) continue;
+                        if (generatedCode == null) continue;
 
                         var sourceText = SourceText.From(generatedCode, Encoding.UTF8);
                         var fileName = $"{classSymbol.Name}.{subName}.cs";
@@ -115,7 +116,7 @@ namespace MVVM.Generator.Generators
             }
         }
 
-        private string GeneratePartialClass(INamedTypeSymbol classSymbol, SemanticModel model)
+        private string? GeneratePartialClass(INamedTypeSymbol classSymbol, SemanticModel model)
         {
             var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 
@@ -127,6 +128,7 @@ namespace MVVM.Generator.Generators
             properties.Clear();
             staticFields.Clear();
             staticProperties.Clear();
+            if(generators == null) return null;
 
             foreach (var generator in generators)
             {

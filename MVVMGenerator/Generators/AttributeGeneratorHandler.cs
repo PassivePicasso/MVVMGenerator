@@ -23,7 +23,7 @@ namespace MVVM.Generator.Generators
             {
                 return a =>
                 {
-                    bool v = a.AttributeClass.Name == AttributeName;
+                    bool v = a?.AttributeClass?.Name == AttributeName;
                     return v;
                 };
             }

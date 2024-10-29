@@ -1,13 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
-using System.Diagnostics;
 using System.Linq;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
-using MVVM.Generator;
 using MVVM.Generator.Attributes;
 using MVVM.Generator.Utilities;
 
@@ -30,14 +28,16 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
         foreach (var fieldAttribute in fieldSymbol.GetAttributes())
         {
-            if (fieldAttribute.AttributeClass.Name == AttrTypeName) continue;
-            var targets = fieldAttribute.AttributeClass.GetAttributes()
-                .First(aca => aca.AttributeClass.Name == AttrUsageName).ConstructorArguments
-                .First(ad => ad.Type.Name == AttrTargetName);
+            if (fieldAttribute?.AttributeClass?.Name == AttrTypeName) continue;
+            var targets = fieldAttribute?.AttributeClass?.GetAttributes()
+                .First(aca => aca?.AttributeClass?.Name == AttrUsageName).ConstructorArguments
+                .First(ad => ad.Type?.Name == AttrTargetName)
+                .Value;
+            if (targets == null) continue;
 
-            var result = (AttributeTargets)(int)targets.Value;
+            var result = (AttributeTargets)(int)targets;
             var validOnProperty = result.HasFlag(AttributeTargets.Property);
-            if (validOnProperty)
+            if (validOnProperty && fieldAttribute?.AttributeClass != null)
                 NamespaceExtractor.AddNamespaceUsings(usings, fieldAttribute.AttributeClass);
         }
 
@@ -64,6 +64,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         var virtualPrefix = string.Empty;
         var getVisibility = string.Empty;
         var setVisibility = string.Empty;
+        var staticString = fieldSymbol.IsStatic ? "static " : string.Empty;
 
         // Trim leading underscores and prefixes
         if (name.StartsWith("_"))
@@ -80,25 +81,31 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         var attributeData = fieldSymbol.GetAttributes()
             .FirstOrDefault(ad => ad.AttributeClass?.Name == AttrTypeName);
 
-        if ((attributeData?.NamedArguments.Length ?? 0) > 0)
+        if (attributeData != null && attributeData.NamedArguments.Length > 0)
         {
             foreach (var namedArg in attributeData.NamedArguments)
+            {
+                var argValue = namedArg.Value.Value;
+                if (argValue == null) continue;
+
                 switch (namedArg.Key)
                 {
                     case nameof(AutoNotifyAttribute.GetterAccess):
-                        getVisibility = $"{((Access)namedArg.Value.Value).ToString().ToLower()} ";
+                        getVisibility = $"{((Access)argValue).ToString().ToLower()} ";
                         break;
                     case nameof(AutoNotifyAttribute.SetterAccess):
-                        setVisibility = $"{((Access)namedArg.Value.Value).ToString().ToLower()} ";
+                        setVisibility = $"{((Access)argValue).ToString().ToLower()} ";
                         break;
                     case nameof(AutoNotifyAttribute.IsVirtual):
-                        virtualPrefix = (bool)namedArg.Value.Value
+                        virtualPrefix = (bool)argValue
                                       ? "virtual "
                                       : string.Empty;
                         break;
                     case nameof(AutoNotifyAttribute.PropertyChangedHandlerName):
                         {
                             var methodName = namedArg.Value.Value as string;
+                            if (methodName == null)
+                                break;
                             var containingType = fieldSymbol.ContainingType;
                             var matchedMethodSymbol = containingType.GetMembers()
                                 .OfType<IMethodSymbol>()
@@ -121,6 +128,8 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
                     case nameof(AutoNotifyAttribute.CollectionChangedHandlerName):
                         {
                             var methodName = namedArg.Value.Value as string;
+                            if (methodName == null)
+                                break;
                             var containingType = fieldSymbol.ContainingType;
                             var matchedMethodSymbol = containingType.GetMembers()
                                 .OfType<IMethodSymbol>()
@@ -150,12 +159,13 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
                         }
                         break;
                 }
+            }
         }
 
         // Existing logic for properties that do not implement INotifyCollectionChanged
         properties.Add($$"""
 {{defines}}{{propertyAttributesString}}
-        public {{virtualPrefix}}{{type}} {{name.Substring(0, 1).ToUpper()}}{{name.Substring(1)}}
+        public {{staticString}}{{virtualPrefix}}{{type}} {{name.Substring(0, 1).ToUpper()}}{{name.Substring(1)}}
         {
             {{getVisibility}}get => {{name}};
             {{setVisibility}}set
@@ -187,13 +197,17 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         foreach (var fieldAttribute in fieldSymbol.GetAttributes())
         {
             var attributeClass = fieldAttribute.AttributeClass;
+            if (attributeClass == null) continue;
+
             var attributeClassName = attributeClass.Name;
             if (attributeClassName == AttrTypeName) continue;
 
             var attrClassAttributes = attributeClass.GetAttributes();
 
-            var usageAttributeData = attrClassAttributes.First(aca => aca.AttributeClass.Name == AttrUsageName);
-            var targets = usageAttributeData.ConstructorArguments.First(ad => ad.Type.Name == AttrTargetName);
+            var usageAttributeData = attrClassAttributes.First(aca => aca?.AttributeClass?.Name == AttrUsageName);
+            var targets = usageAttributeData.ConstructorArguments.First(ad => ad.Type?.Name == AttrTargetName);
+            if (targets.Value == null) continue;
+
             var result = (AttributeTargets)(int)targets.Value;
 
             if (result.HasFlag(AttributeTargets.Property))

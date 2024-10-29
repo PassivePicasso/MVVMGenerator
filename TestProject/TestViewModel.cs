@@ -15,16 +15,16 @@ namespace TestProject
     public partial class TestViewModel
     {
         [AutoNotify]
-        private OtherType.TestEnum[] testEnumValues;
+        private OtherType.TestEnum[]? testEnumValues;
 
         [JsonConverter(typeof(StringEnumConverter))]
         [AutoNotify]
         private Visibility visibility = Visibility.Visible;
 
         [AutoNotify(SetterAccess = Access.Private)]
-        private Dictionary<string?, byte[]>? dataDictionary;
+        private Dictionary<string, byte[]>? dataDictionary;
 
-        [AutoNotify] private byte[] data;
+        [AutoNotify] private byte[]? data;
 
         [AutoNotify(PropertyChangedHandlerName = nameof(IsOpenedChanged))]
         private bool isOpen;
