@@ -41,17 +41,14 @@ namespace MVVM.Generator.Generators
         internal List<string> staticFields/*    */= new();
         internal List<string> staticProperties/**/= new();
 
-        static BaseAttributeGenerator()
-        {
-#if DEBUG
-            if (GenDebugger.LaunchRequested) return;
-            if (!System.Diagnostics.Debugger.IsAttached) return;
-            System.Diagnostics.Debugger.Launch();
-#endif
-        }
-
         public void Initialize(GeneratorInitializationContext context)
         {
+#if DEBUG
+            if (!GenDebugger.LaunchRequested && !System.Diagnostics.Debugger.IsAttached)
+            {
+                System.Diagnostics.Debugger.Launch();
+            }
+#endif
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
             var types = assemblies.SelectMany(t =>
             {
