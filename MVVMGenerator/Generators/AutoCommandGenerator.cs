@@ -16,7 +16,6 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
     protected override void AddUsings(List<string> usings, IMethodSymbol symbol)
     {
         usings.Add("using System.Windows.Input;");
-        usings.Add("using Newtonsoft.Json;");
         if (symbol.Parameters.Length > 0)
         {
             NamespaceExtractor.AddNamespaceUsings(usings, symbol.Parameters[0].Type);
@@ -101,7 +100,7 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
 
     protected override void AddFields(List<string> definitions, IMethodSymbol symbol)
         => definitions.Add($$"""
-        [JsonIgnore]
+
         private ICommand? {{GetFieldName(symbol)}};
 """);
 
@@ -110,7 +109,7 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
         var className = GetCommandClassName(symbol);
         var fieldName = GetFieldName(symbol);
         definitions.Add($$"""
-                    [JsonIgnore]
+
                     public ICommand {{symbol.Name}}Command => {{fieldName}} ??= new {{className}}({{(symbol.IsStatic ? string.Empty : "this")}});
             """);
     }
