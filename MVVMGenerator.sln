@@ -9,6 +9,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestProject", "TestProject\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestViewModels", "TestViewModels\TestViewModels.csproj", "{CD01BA87-FBF4-40D7-A4E6-D51447604C58}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Extras", "Extras", "{36A797A0-1D1F-47E8-B577-7534A84A4381}"
+	ProjectSection(SolutionItems) = preProject
+		.github\copilot-instructions.md = .github\copilot-instructions.md
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MVVM.Generator.Tests", "Tests\MVVM.Generator.Tests.csproj", "{6F402FB6-0A4C-40FB-84BE-76720715383D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +34,10 @@ Global
 		{CD01BA87-FBF4-40D7-A4E6-D51447604C58}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CD01BA87-FBF4-40D7-A4E6-D51447604C58}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CD01BA87-FBF4-40D7-A4E6-D51447604C58}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6F402FB6-0A4C-40FB-84BE-76720715383D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F402FB6-0A4C-40FB-84BE-76720715383D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6F402FB6-0A4C-40FB-84BE-76720715383D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6F402FB6-0A4C-40FB-84BE-76720715383D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

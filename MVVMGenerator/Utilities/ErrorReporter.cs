@@ -1,11 +1,11 @@
-    using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis;
 
-    namespace MVVM.Generator.Utilities;
-
+namespace MVVM.Generator.Utilities
+{
     public class ErrorReporter
     {
         public void ReportError(
-            GeneratorExecutionContext context,
+            SourceProductionContext context,
             string id,
             string message,
             Location? location = null)
@@ -22,4 +22,4 @@
             context.ReportDiagnostic(diagnostic);
         }
     }
-    
+}
