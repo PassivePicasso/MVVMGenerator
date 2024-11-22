@@ -21,7 +21,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
     private Dictionary<string, List<string>> _dependsOnLookup = new();
 
-    protected override void BeforeProcessAttribute(BaseAttributeGenerator generator, INamedTypeSymbol classSymbol)
+    protected override void BeforeProcessAttribute(ClassGenerationContext context, INamedTypeSymbol classSymbol)
     {
         // Build the depends-on lookup before generating code
         foreach (var member in classSymbol.GetMembers())

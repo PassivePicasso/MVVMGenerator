@@ -4,13 +4,10 @@ using System.Linq;
 
 using Microsoft.CodeAnalysis;
 
+using MVVM.Generator.Utilities;
+
 namespace MVVM.Generator.Generators
 {
-    internal interface IAttributeGenerator
-    {
-        void Process(BaseAttributeGenerator generator, INamedTypeSymbol classSymbol);
-    }
-
     internal abstract class AttributeGeneratorHandler<TSymbol, TAttribute> : IAttributeGenerator
         where TSymbol : ISymbol
         where TAttribute : Attribute
@@ -19,12 +16,12 @@ namespace MVVM.Generator.Generators
         private Func<ISymbol, bool> SymbolContainsAttribute => p => p.GetAttributes().Any(SymbolAttribute);
         private Func<AttributeData, bool> SymbolAttribute => a => a?.AttributeClass?.Name == AttributeName;
 
-        public void Process(BaseAttributeGenerator generator, INamedTypeSymbol classSymbol)
+        public void Process(ClassGenerationContext context, INamedTypeSymbol classSymbol)
         {
             if (!classSymbol.GetMembers().Any(SymbolContainsAttribute)) return;
 
             // Call the BeforeProcessAttribute method
-            BeforeProcessAttribute(generator, classSymbol);
+            BeforeProcessAttribute(context, classSymbol);
 
             var symbols = classSymbol.GetMembers()
                 .Where(p => p.GetAttributes().Any(SymbolAttribute))
@@ -34,18 +31,18 @@ namespace MVVM.Generator.Generators
 
             foreach (var tSymbol in symbols.OfType<TSymbol>())
             {
-                AddUsings(generator.usings, tSymbol);
-                AddInterfaces(generator.interfaces, tSymbol);
-                AddNestedClasses(generator.nestedClasses, tSymbol);
-                AddInterfaceImplementations(generator.interfaceImplementations, tSymbol);
-                AddFields(generator.fields, tSymbol);
-                AddProperties(generator.properties, tSymbol);
-                AddStaticFields(generator.staticFields, tSymbol);
-                AddStaticProperties(generator.staticProperties, tSymbol);
+                AddUsings(context.Usings, tSymbol);
+                AddInterfaces(context.Interfaces, tSymbol);
+                AddNestedClasses(context.NestedClasses, tSymbol);
+                AddInterfaceImplementations(context.InterfaceImplementations, tSymbol);
+                AddFields(context.Fields, tSymbol);
+                AddProperties(context.Properties, tSymbol);
+                AddStaticFields(context.StaticFields, tSymbol);
+                AddStaticProperties(context.StaticProperties, tSymbol);
             }
         }
 
-        protected virtual void BeforeProcessAttribute(BaseAttributeGenerator generator, INamedTypeSymbol classSymbol) { }
+        protected virtual void BeforeProcessAttribute(ClassGenerationContext context, INamedTypeSymbol classSymbol) { }
         protected virtual void AddUsings(List<string> definitions, TSymbol symbol) { }
         protected virtual void AddInterfaces(List<string> definitions, TSymbol symbol) { }
         protected virtual void AddNestedClasses(List<string> definitions, TSymbol symbol) { }

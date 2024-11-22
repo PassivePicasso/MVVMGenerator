@@ -7,22 +7,9 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
+using MVVM.Generator.Utilities;
+
 namespace MVVM.Generator.Generators;
-
-internal static class GenDebugger
-{
-    private static bool launchedRequest = false;
-    public static bool LaunchRequested
-    {
-        get
-        {
-            if (launchedRequest) return true;
-
-            launchedRequest = true;
-            return false;
-        }
-    }
-}
 
 [Generator]
 public sealed class BaseAttributeGenerator : ISourceGenerator
@@ -31,15 +18,8 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
     private static readonly Func<string, string, string> AppendInterfaces = (a, b) => $"{a}, {b}";
 
     private IAttributeGenerator[]? _generators;
-
-    internal List<string> interfaces = new();
-    internal List<string> usings = new();
-    internal List<string> nestedClasses = new();
-    internal List<string> interfaceImplementations = new();
-    internal List<string> fields = new();
-    internal List<string> properties = new();
-    internal List<string> staticFields = new();
-    internal List<string> staticProperties = new();
+    private readonly CodeRenderer _codeRenderer = new CodeRenderer();
+    private readonly ErrorReporter _errorReporter = new ErrorReporter();
 
     public void Initialize(GeneratorInitializationContext context)
     {
@@ -62,6 +42,8 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
             }
         }).ToArray();
 
+        context.RegisterForSyntaxNotifications(() => new SyntaxReceiver());
+
         var generatorTypes = types
             .Where(t => typeof(IAttributeGenerator).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
             .ToArray();
@@ -78,37 +60,8 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
         {
             var compilation = context.Compilation;
 
-            // Dictionary to group class symbols by their full name
-            var classSymbolsByFullName = new Dictionary<string, List<INamedTypeSymbol>>();
+            var classSymbolsByFullName = CollectClassSymbols(context, compilation);
 
-            // Process each syntax tree in the current compilation
-            foreach (var syntaxTree in compilation.SyntaxTrees)
-            {
-                // Get the semantic model for the syntax tree
-                var semanticModel = compilation.GetSemanticModel(syntaxTree);
-
-                // Find all class declarations in the syntax tree
-                var classDeclarations = syntaxTree.GetRoot().DescendantNodes()
-                    .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax>();
-
-                foreach (var classDeclaration in classDeclarations)
-                {
-                    // Get the symbol representing the class
-                    if (semanticModel.GetDeclaredSymbol(classDeclaration) is INamedTypeSymbol namedTypeSymbol)
-                    {
-                        var fullName = namedTypeSymbol.ToDisplayString();
-
-                        if (!classSymbolsByFullName.TryGetValue(fullName, out var symbolList))
-                        {
-                            symbolList = new List<INamedTypeSymbol>();
-                            classSymbolsByFullName[fullName] = symbolList;
-                        }
-                        symbolList.Add(namedTypeSymbol);
-                    }
-                }
-            }
-
-            // Generate the partial class for each unique type
             foreach (var kvp in classSymbolsByFullName)
             {
                 var classSymbols = kvp.Value;
@@ -122,56 +75,76 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
         }
         catch (Exception ex)
         {
-            ReportError(context, "BAG001", $"Error executing generator: {ex.Message}");
+            _errorReporter.ReportError(context, "BAG001", $"Error executing generator: {ex.Message}");
         }
+    }
+
+    private Dictionary<string, List<INamedTypeSymbol>> CollectClassSymbols(
+        GeneratorExecutionContext context,
+        Compilation compilation)
+    {
+        var classSymbolsByFullName = new Dictionary<string, List<INamedTypeSymbol>>();
+
+        if (context.SyntaxReceiver is not SyntaxReceiver receiver)
+            return classSymbolsByFullName;
+
+        foreach (var classDeclaration in receiver.ClassDeclarations)
+        {
+            var semanticModel = compilation.GetSemanticModel(classDeclaration.SyntaxTree);
+            if (semanticModel.GetDeclaredSymbol(classDeclaration) is INamedTypeSymbol namedTypeSymbol)
+            {
+                var fullName = namedTypeSymbol.ToDisplayString();
+
+                if (!classSymbolsByFullName.TryGetValue(fullName, out var symbolList))
+                {
+                    symbolList = new List<INamedTypeSymbol>();
+                    classSymbolsByFullName[fullName] = symbolList;
+                }
+                symbolList.Add(namedTypeSymbol);
+            }
+        }
+
+        return classSymbolsByFullName;
     }
 
     private string? GeneratePartialClass(IEnumerable<INamedTypeSymbol> classSymbols, GeneratorExecutionContext context)
     {
         var classSymbol = classSymbols.First();
+        var generationContext = new ClassGenerationContext();
         try
         {
             var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 
-            interfaces.Clear();
-            usings.Clear();
-            nestedClasses.Clear();
-            interfaceImplementations.Clear();
-            fields.Clear();
-            properties.Clear();
-            staticFields.Clear();
-            staticProperties.Clear();
+            generationContext.Interfaces.Clear();
+            generationContext.Usings.Clear();
+            generationContext.NestedClasses.Clear();
+            generationContext.InterfaceImplementations.Clear();
+            generationContext.Fields.Clear();
+            generationContext.Properties.Clear();
+            generationContext.StaticFields.Clear();
+            generationContext.StaticProperties.Clear();
 
             if (_generators == null) return null;
 
             foreach (var generator in _generators)
             {
-                generator.Process(this, classSymbol);
+                generator.Process(generationContext, classSymbol);
             }
 
-            if (!interfaces.Any()
-                && !usings.Any()
-                && !nestedClasses.Any()
-                && !interfaceImplementations.Any()
-                && !fields.Any()
-                && !properties.Any()
-                && !staticFields.Any()
-                && !staticProperties.Any())
-            {
+            if (!generationContext.IsPopulated())
                 return null;
-            }
 
-            usings.Sort();
+            generationContext.Usings.Sort();
 
-            string derivationSeparator = interfaces.Any() ? " : " : string.Empty;
-            string renderedInterfaceList = RenderInterfaces(interfaces);
-            string renderedUsings = Render(usings);
-            string renderedNestedClasses = Render(nestedClasses);
-            string renderedIntImpl = Render(interfaceImplementations);
-            string renderedFields = Render(fields);
-            string renderedProperties = Render(properties);
-            string renderedStaticFields = Render(staticFields);
-            string renderedStaticProperties = Render(staticProperties);
+            string derivationSeparator = generationContext.Interfaces.Any() ? " : " : string.Empty;
+            string renderedInterfaceList = _codeRenderer.RenderInterfaces(generationContext.Interfaces);
+            string renderedUsings = _codeRenderer.Render(generationContext.Usings);
+            string renderedNestedClasses = _codeRenderer.Render(generationContext.NestedClasses);
+            string renderedIntImpl = _codeRenderer.Render(generationContext.InterfaceImplementations);
+            string renderedFields = _codeRenderer.Render(generationContext.Fields);
+            string renderedProperties = _codeRenderer.Render(generationContext.Properties);
+            string renderedStaticFields = _codeRenderer.Render(generationContext.StaticFields);
+            string renderedStaticProperties = _codeRenderer.Render(generationContext.StaticProperties);
 
             return $$"""
                 {{renderedUsings}}
@@ -192,34 +165,8 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
         }
         catch (Exception ex)
         {
-            ReportError(context, "BAG002", $"Error generating partial class for {classSymbol.Name}: {ex.Message}");
+            _errorReporter.ReportError(context, "BAG002", $"Error generating partial class for {classSymbol.Name}: {ex.Message}");
             return null;
         }
-    }
-
-    private string Render(IEnumerable<string> strings) => strings.Any()
-        ? strings.Distinct().Aggregate(AppendLines)
-        : string.Empty;
-
-    private string RenderInterfaces(IEnumerable<string> interfaceList)
-    {
-        var distinctInterfaces = interfaceList.Distinct().ToArray();
-        return distinctInterfaces.Length > 0
-            ? distinctInterfaces.Aggregate(AppendInterfaces)
-            : string.Empty;
-    }
-
-    private void ReportError(GeneratorExecutionContext context, string id, string message, Location? location = null)
-    {
-        var descriptor = new DiagnosticDescriptor(
-            id: id,
-            title: "Generator Error",
-            messageFormat: message,
-            category: "Generator",
-            DiagnosticSeverity.Error,
-            isEnabledByDefault: true);
-
-        var diagnostic = Diagnostic.Create(descriptor, location);
-        context.ReportDiagnostic(diagnostic);
     }
 }
