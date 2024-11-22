@@ -9,7 +9,6 @@ using MVVM.Generator.Utilities;
 
 namespace MVVM.Generator.Generators;
 
-[Generator]
 internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, AutoCommandAttribute>
 {
     protected override void AddUsings(List<string> usings, IMethodSymbol symbol)

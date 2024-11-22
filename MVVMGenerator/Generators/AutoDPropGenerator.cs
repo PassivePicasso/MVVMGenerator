@@ -7,7 +7,6 @@ using System.Collections.Generic;
 
 namespace MVVM.Generator.Generators
 {
-    [Generator]
     internal class AutoDPropGenerator : AttributeGeneratorHandler<IFieldSymbol, AutoDPropAttribute>
     {
         protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)

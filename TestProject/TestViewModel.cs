@@ -30,6 +30,10 @@ namespace TestProject
         private bool isOpen;
         private void IsOpenedChanged(object? sender, EventArgs args) { }
 
+        [DependsOn(nameof(IsOpen))]
+        public bool Ready => IsOpen;
+
+
         [AutoNotify(CollectionChangedHandlerName = nameof(OnCollectionChanged))]
         private ObservableCollection<string> collection = new ObservableCollection<string>();
         public void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args) { }

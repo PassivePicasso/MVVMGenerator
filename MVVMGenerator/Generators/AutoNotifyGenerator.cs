@@ -11,14 +11,45 @@ using MVVM.Generator.Utilities;
 
 namespace MVVM.Generator.Generators;
 
-
-[Generator]
 internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, AutoNotifyAttribute>
 {
     private const string AttrUsageName = nameof(AttributeUsageAttribute);
     private const string AttrTargetName = nameof(AttributeTargets);
     private const string AttrTypeName = nameof(AutoNotifyAttribute);
     private const string INCCName = nameof(INotifyCollectionChanged);
+    private const string DependsAttrTypeName = nameof(DependsOnAttribute);
+
+    private Dictionary<string, List<string>> _dependsOnLookup = new();
+
+    protected override void BeforeProcessAttribute(BaseAttributeGenerator generator, INamedTypeSymbol classSymbol)
+    {
+        // Build the depends-on lookup before generating code
+        foreach (var member in classSymbol.GetMembers())
+        {
+            if (member is not IFieldSymbol fieldSymbol) continue;
+
+            foreach (var attribute in fieldSymbol.GetAttributes())
+            {
+                if (attribute.AttributeClass?.Name == DependsAttrTypeName)
+                {
+                    var propertyNames = attribute.ConstructorArguments.FirstOrDefault().Values
+                        .Select(v => v.Value as string)
+                        .Where(name => !string.IsNullOrEmpty(name))
+                        .Cast<string>()
+                        .ToList();
+
+                    foreach (var propertyName in propertyNames)
+                    {
+                        if (!_dependsOnLookup.ContainsKey(propertyName))
+                        {
+                            _dependsOnLookup[propertyName] = new List<string>();
+                        }
+                        _dependsOnLookup[propertyName].Add(GetPropertyName(fieldSymbol));
+                    }
+                }
+            }
+        }
+    }
 
     protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)
     {
@@ -30,8 +61,8 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         {
             if (fieldAttribute?.AttributeClass?.Name == AttrTypeName) continue;
             var targets = fieldAttribute?.AttributeClass?.GetAttributes()
-                .First(aca => aca?.AttributeClass?.Name == AttrUsageName).ConstructorArguments
-                .First(ad => ad.Type?.Name == AttrTargetName)
+                .FirstOrDefault(aca => aca?.AttributeClass?.Name == AttrUsageName)?.ConstructorArguments
+                .FirstOrDefault(ad => ad.Type?.Name == AttrTargetName)
                 .Value;
             if (targets == null) continue;
 
@@ -56,7 +87,8 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
     protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol)
     {
-        var name = fieldSymbol.Name;
+        var fieldName = fieldSymbol.Name;
+        var propertyName = GetPropertyName(fieldSymbol);
         var type = TypeHelper.GetTypeName(fieldSymbol.Type);
         var defines = string.Empty;
         var prefix = string.Empty;
@@ -66,15 +98,6 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         var setVisibility = string.Empty;
         var staticString = fieldSymbol.IsStatic ? "static " : string.Empty;
 
-        // Trim leading underscores and prefixes
-        if (name.StartsWith("_"))
-        {
-            name = name.TrimStart('_');
-        }
-        else if (name.StartsWith("s_"))
-        {
-            name = name.Substring(2);
-        }
 
         var propertyAttributesString = ReconstructAttributes(fieldSymbol);
 
@@ -97,13 +120,11 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
                         setVisibility = $"{((Access)argValue).ToString().ToLower()} ";
                         break;
                     case nameof(AutoNotifyAttribute.IsVirtual):
-                        virtualPrefix = (bool)argValue
-                                      ? "virtual "
-                                      : string.Empty;
+                        virtualPrefix = (bool)argValue ? "virtual " : string.Empty;
                         break;
                     case nameof(AutoNotifyAttribute.PropertyChangedHandlerName):
                         {
-                            var methodName = namedArg.Value.Value as string;
+                            var methodName = argValue as string;
                             if (methodName == null)
                                 break;
                             var containingType = fieldSymbol.ContainingType;
@@ -113,7 +134,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
                             ValidateEventHandler(methodName, containingType, matchedMethodSymbol);
 
-                            string handlerFieldName = $"_{name}ChangedHandler";
+                            string handlerFieldName = $"_{fieldName}ChangedHandler";
                             defines = $$"""
 
         private EventHandler {{handlerFieldName}};
@@ -129,7 +150,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
                         break;
                     case nameof(AutoNotifyAttribute.CollectionChangedHandlerName):
                         {
-                            var methodName = namedArg.Value.Value as string;
+                            var methodName = argValue as string;
                             if (methodName == null)
                                 break;
                             var containingType = fieldSymbol.ContainingType;
@@ -139,21 +160,20 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
                             ValidateCollectionChangedHandler(methodName, containingType, matchedMethodSymbol);
 
-                            string handlerFieldName = $"_{name}CollectionChangedHandler";
+                            string handlerFieldName = $"_{fieldName}CollectionChangedHandler";
                             defines = $"private NotifyCollectionChangedEventHandler {handlerFieldName};";
                             prefix = $$"""
 
-                if ({{name}} != null && {{handlerFieldName}} != null)
+                if ({{fieldName}} != null && {{handlerFieldName}} != null)
                 {
-                    (({{INCCName}}){{name}}).CollectionChanged -= {{handlerFieldName}};
+                    (({{INCCName}}){{fieldName}}).CollectionChanged -= {{handlerFieldName}};
                 }
 """;
                             suffix = $$"""
-
-                if ({{name}} != null && {{handlerFieldName}} != null)
+                if ({{fieldName}} != null && {{handlerFieldName}} != null)
                 {
                     {{handlerFieldName}} = {{methodName}};
-                    (({{INCCName}}){{name}}).CollectionChanged += {{handlerFieldName}};
+                    (({{INCCName}}){{fieldName}}).CollectionChanged += {{handlerFieldName}};
                 }
 """;
                         }
@@ -162,38 +182,67 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
             }
         }
 
-        // Existing logic for properties that do not implement INotifyCollectionChanged
+        // Handle DependsOnAttribute
+        var dependsSuffix = string.Empty;
+        if (_dependsOnLookup.TryGetValue(propertyName, out var dependsProperties))
+        {
+            dependsSuffix = string.Join("\r\n", dependsProperties.Select(p => $"OnPropertyChanged(nameof({p}));"));
+        }
+
+        // Generate the property code
         properties.Add($$"""
         {{defines}}{{propertyAttributesString}}
-        public {{staticString}}{{virtualPrefix}}{{type}} {{name.Substring(0, 1).ToUpper()}}{{name.Substring(1)}}
+        public {{staticString}}{{virtualPrefix}}{{type}} {{propertyName}}
         {
-            {{getVisibility}}get => {{name}};
+            {{getVisibility}}get => {{fieldName}};
             {{setVisibility}}set
-            {{{prefix}}
-                {{name}} = value;{{suffix}}
+            {
+                {{prefix}}
+                {{fieldName}} = value;{{suffix}}
                 OnPropertyChanged();
+                {{dependsSuffix}}
             }
         }
 """);
     }
+    
+    protected override void AddInterfaces(List<string> interfaces, IFieldSymbol fieldSymbol)
+    {
+        if (!interfaces.Contains("INotifyPropertyChanged"))
+            interfaces.Add("INotifyPropertyChanged");
+    }
+
     protected override void AddInterfaceImplementations(List<string> impls, IFieldSymbol fieldSymbol)
     {
-        impls.Add($$"""
+        if (!impls.Any(i => i.Contains("PropertyChanged")))
+        {
+            impls.Add($$"""
         public event PropertyChangedEventHandler? PropertyChanged;
         void OnPropertyChanged([CallerMemberName] string? propertyName = null) 
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 """);
+        }
     }
-    protected override void AddInterfaces(List<string> interfaces, IFieldSymbol fieldSymbol)
+
+    private static string GetPropertyName(IFieldSymbol fieldSymbol)
     {
-        interfaces.Add("INotifyPropertyChanged");
+        var name = fieldSymbol.Name;
+        if (name.StartsWith("_"))
+        {
+            name = name.TrimStart('_');
+        }
+        else if (name.StartsWith("s_"))
+        {
+            name = name.Substring(2);
+        }
+        return char.ToUpper(name[0]) + name.Substring(1);
     }
 
     private static string ReconstructAttributes(IFieldSymbol fieldSymbol)
     {
-        List<string> propertyAttributes = new();
+        var propertyAttributes = new List<string>();
         foreach (var fieldAttribute in fieldSymbol.GetAttributes())
         {
             var attributeClass = fieldAttribute.AttributeClass;
@@ -204,11 +253,14 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
             var attrClassAttributes = attributeClass.GetAttributes();
 
-            var usageAttributeData = attrClassAttributes.First(aca => aca?.AttributeClass?.Name == AttrUsageName);
-            var targets = usageAttributeData.ConstructorArguments.First(ad => ad.Type?.Name == AttrTargetName);
-            if (targets.Value == null) continue;
+            var usageAttributeData = attrClassAttributes
+                .FirstOrDefault(aca => aca?.AttributeClass?.Name == AttrUsageName);
+            var targets = usageAttributeData?.ConstructorArguments
+                .FirstOrDefault(ad => ad.Type?.Name == AttrTargetName)
+                .Value;
+            if (targets == null) continue;
 
-            var result = (AttributeTargets)(int)targets.Value;
+            var result = (AttributeTargets)(int)targets;
 
             if (result.HasFlag(AttributeTargets.Property))
             {
@@ -232,11 +284,12 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
         if (propertyAttributes.Count > 0)
             return $"""
-[{propertyAttributes.Aggregate((a, b) => $"{a}, {b}")}]
+        [{propertyAttributes.Aggregate((a, b) => $"{a}, {b}")}]
 """;
         return string.Empty;
     }
-    private static void ValidateEventHandler(string methodName, INamedTypeSymbol containingType, IMethodSymbol matchedMethodSymbol)
+
+    private static void ValidateEventHandler(string methodName, INamedTypeSymbol containingType, IMethodSymbol? matchedMethodSymbol)
     {
         if (matchedMethodSymbol == null)
             throw new InvalidOperationException($"Method '{methodName}' not found on type '{containingType.Name}'.");
@@ -253,19 +306,21 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         if (firstParameter.Type.SpecialType != SpecialType.System_Object)
             throw new InvalidOperationException($"Method '{methodName}' does not have the correct first parameter type.");
 
-        if (IsOrDescendedFrom<EventArgs>(secondParameter)) return;
+        if (!IsOrDescendedFrom<EventArgs>(secondParameter))
+            throw new InvalidOperationException($"Parameter '{secondParameter.Name}' of method '{methodName}' is not 'EventArgs' or derived from it.");
+    }
 
-        throw new InvalidOperationException($"Parameter '{secondParameter.Name}' of Method '{methodName}' is not 'EventArgs'.");
-    }
-    private static void ValidateCollectionChangedHandler(string methodName, INamedTypeSymbol containingType, IMethodSymbol matchedMethodSymbol)
+    private static void ValidateCollectionChangedHandler(string methodName, INamedTypeSymbol containingType, IMethodSymbol? matchedMethodSymbol)
     {
-        var parameter = matchedMethodSymbol.Parameters[1];
         ValidateEventHandler(methodName, containingType, matchedMethodSymbol);
-        if (!IsOrDescendedFrom<NotifyCollectionChangedEventArgs>(parameter))
-            throw new InvalidOperationException(
-                $"Parameter '{parameter.Name}' of Method '{methodName}' is not 'NotifyCollectionChangedEventArgs'."
-                );
+
+        var secondParameter = matchedMethodSymbol!.Parameters[1];
+        if (!IsOrDescendedFrom<NotifyCollectionChangedEventArgs>(secondParameter))
+        {
+            throw new InvalidOperationException($"Parameter '{secondParameter.Name}' of method '{methodName}' is not 'NotifyCollectionChangedEventArgs' or derived from it.");
+        }
     }
+
     private static bool IsOrDescendedFrom<T>(IParameterSymbol parameter)
     {
         var eventArgsType = parameter.Type;

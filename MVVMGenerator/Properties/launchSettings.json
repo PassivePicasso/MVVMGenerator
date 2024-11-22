@@ -1,7 +1,8 @@
 {
   "profiles": {
     "MVVM.Generator": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "nativeDebugging": true
     },
     "DebugGenerator": {
       "commandName": "DebugRoslynComponent",

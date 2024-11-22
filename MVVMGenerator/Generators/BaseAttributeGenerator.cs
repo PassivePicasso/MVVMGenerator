@@ -23,28 +23,30 @@ internal static class GenDebugger
         }
     }
 }
+
 [Generator]
 public sealed class BaseAttributeGenerator : ISourceGenerator
 {
-    static readonly Func<string, string, string> appendLines = (a, b) => $"{a}\r\n{b}";
-    static readonly Func<string, string, string> appendInterfaces = (a, b) => $"{a}, {b}";
+    private static readonly Func<string, string, string> AppendLines = (a, b) => $"{a}\r\n{b}";
+    private static readonly Func<string, string, string> AppendInterfaces = (a, b) => $"{a}, {b}";
 
-    IAttributeGenerator[]? generators;
-    internal List<string> interfaces/*      */= new();
-    internal List<string> usings/*          */= new();
-    internal List<string> nestedClasses/*   */= new();
-    internal List<string> interfaceImplementations/*          */= new();
-    internal List<string> fields/*          */= new();
-    internal List<string> properties/*      */= new();
-    internal List<string> staticFields/*    */= new();
-    internal List<string> staticProperties/**/= new();
+    private IAttributeGenerator[]? _generators;
+
+    internal List<string> interfaces = new();
+    internal List<string> usings = new();
+    internal List<string> nestedClasses = new();
+    internal List<string> interfaceImplementations = new();
+    internal List<string> fields = new();
+    internal List<string> properties = new();
+    internal List<string> staticFields = new();
+    internal List<string> staticProperties = new();
 
     public void Initialize(GeneratorInitializationContext context)
     {
 #if DEBUG
-        if (!GenDebugger.LaunchRequested && !System.Diagnostics.Debugger.IsAttached)
+        if (!System.Diagnostics.Debugger.IsAttached)
         {
-            System.Diagnostics.Debugger.Launch();
+            System.Diagnostics.Debugger.Break();
         }
 #endif
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -56,23 +58,24 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
             }
             catch (ReflectionTypeLoadException rtle)
             {
-                return rtle.Types;
+                return rtle.Types.Where(type => type != null);
             }
         }).ToArray();
-        var iAttributeGenerators = types
-            .Where(t => t != null)
-            .Where(t => !t.IsAbstract && !t.IsInterface)
-            .Where(t => t != typeof(IAttributeGenerator) && typeof(IAttributeGenerator).IsAssignableFrom(t)).ToArray();
-        var untypedGeneratorInstances = iAttributeGenerators.Select(Activator.CreateInstance).ToArray();
 
-        generators = untypedGeneratorInstances.OfType<IAttributeGenerator>().ToArray();
+        var generatorTypes = types
+            .Where(t => typeof(IAttributeGenerator).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+            .ToArray();
+
+        _generators = generatorTypes
+            .Select(Activator.CreateInstance)
+            .OfType<IAttributeGenerator>()
+            .ToArray();
     }
 
     public void Execute(GeneratorExecutionContext context)
     {
         try
         {
-            var subName = GetType().Name;
             var compilation = context.Compilation;
 
             // Dictionary to group class symbols by their full name
@@ -91,16 +94,17 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
                 foreach (var classDeclaration in classDeclarations)
                 {
                     // Get the symbol representing the class
-                    var classSymbol = semanticModel.GetDeclaredSymbol(classDeclaration);
-                    if (classSymbol is not INamedTypeSymbol namedTypeSymbol) continue;
-
-                    // Group class symbols by their full name
-                    var fullName = namedTypeSymbol.ToDisplayString();
-                    if (!classSymbolsByFullName.ContainsKey(fullName))
+                    if (semanticModel.GetDeclaredSymbol(classDeclaration) is INamedTypeSymbol namedTypeSymbol)
                     {
-                        classSymbolsByFullName[fullName] = new List<INamedTypeSymbol>();
+                        var fullName = namedTypeSymbol.ToDisplayString();
+
+                        if (!classSymbolsByFullName.TryGetValue(fullName, out var symbolList))
+                        {
+                            symbolList = new List<INamedTypeSymbol>();
+                            classSymbolsByFullName[fullName] = symbolList;
+                        }
+                        symbolList.Add(namedTypeSymbol);
                     }
-                    classSymbolsByFullName[fullName].Add(namedTypeSymbol);
                 }
             }
 
@@ -112,7 +116,7 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
                 if (generatedCode == null) continue;
 
                 var sourceText = SourceText.From(generatedCode, Encoding.UTF8);
-                var fileName = $"{classSymbols.First().Name}.{subName}.cs";
+                var fileName = $"{classSymbols.First().Name}.Generated.cs";
                 context.AddSource(fileName, sourceText);
             }
         }
@@ -137,55 +141,54 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
             properties.Clear();
             staticFields.Clear();
             staticProperties.Clear();
-            if (generators == null) return null;
 
-            foreach (var generator in generators)
+            if (_generators == null) return null;
+
+            foreach (var generator in _generators)
             {
-                foreach (var symbol in classSymbols)
-                {
-                    generator.Process(this, symbol);
-                }
+                generator.Process(this, classSymbol);
             }
-            if (!interfaces.Any()
-              && !usings.Any()
-              && !nestedClasses.Any()
-              && !interfaceImplementations.Any()
-              && !fields.Any()
-              && !properties.Any()
-              && !staticFields.Any()
-              && !staticProperties.Any()
-              ) return null;
 
-            string classUsing = $"using {classSymbol.ContainingNamespace};";
-            usings.RemoveAll(usng => usng.Contains(classUsing));
+            if (!interfaces.Any()
+                && !usings.Any()
+                && !nestedClasses.Any()
+                && !interfaceImplementations.Any()
+                && !fields.Any()
+                && !properties.Any()
+                && !staticFields.Any()
+                && !staticProperties.Any())
+            {
+                return null;
+            }
+
             usings.Sort();
 
-            string derivationSeparator/*     */= interfaces.Any() ? " : " : string.Empty;
-            string renderedInterfaceList/*   */= RenderInterfaces(interfaces);
-            string renderedUsings/*          */= Render(usings);
-            string renderedNestedClasses/*   */= Render(nestedClasses);
-            string renderedIntImpl/*         */= Render(interfaceImplementations);
-            string renderedFields/*          */= Render(fields);
-            string renderedProperties/*      */= Render(properties);
-            string renderedStaticFields/*    */= Render(staticFields);
-            string renderedStaticProperties/**/= Render(staticProperties);
+            string derivationSeparator = interfaces.Any() ? " : " : string.Empty;
+            string renderedInterfaceList = RenderInterfaces(interfaces);
+            string renderedUsings = Render(usings);
+            string renderedNestedClasses = Render(nestedClasses);
+            string renderedIntImpl = Render(interfaceImplementations);
+            string renderedFields = Render(fields);
+            string renderedProperties = Render(properties);
+            string renderedStaticFields = Render(staticFields);
+            string renderedStaticProperties = Render(staticProperties);
 
             return $$"""
-            {{renderedUsings}}
-                                                    
-            namespace {{namespaceName}}
-            {
-                public partial class {{classSymbol.Name}}{{derivationSeparator}}{{renderedInterfaceList}}
+                {{renderedUsings}}
+
+                namespace {{namespaceName}}
                 {
-            {{renderedNestedClasses}}
-            {{renderedStaticFields}}
-            {{renderedStaticProperties}}
-            {{renderedIntImpl}}
-            {{renderedFields}}
-            {{renderedProperties}}
+                    public partial class {{classSymbol.Name}}{{derivationSeparator}}{{renderedInterfaceList}}
+                    {
+                {{renderedNestedClasses}}
+                {{renderedStaticFields}}
+                {{renderedStaticProperties}}
+                {{renderedIntImpl}}
+                {{renderedFields}}
+                {{renderedProperties}}
+                    }
                 }
-            }
-            """;
+                """;
         }
         catch (Exception ex)
         {
@@ -194,15 +197,16 @@ public sealed class BaseAttributeGenerator : ISourceGenerator
         }
     }
 
-    string Render(IEnumerable<string> strings) => strings.Any()
-                                                ? strings.Distinct().Aggregate(appendLines)
-                                                : string.Empty;
-    string RenderInterfaces(IEnumerable<string> interfaces)
+    private string Render(IEnumerable<string> strings) => strings.Any()
+        ? strings.Distinct().Aggregate(AppendLines)
+        : string.Empty;
+
+    private string RenderInterfaces(IEnumerable<string> interfaceList)
     {
-        var frozenInterfaces = interfaces.Distinct().ToArray();
-        return frozenInterfaces.Length > 0
-             ? frozenInterfaces.Aggregate(appendInterfaces)
-             : string.Empty;
+        var distinctInterfaces = interfaceList.Distinct().ToArray();
+        return distinctInterfaces.Length > 0
+            ? distinctInterfaces.Aggregate(AppendInterfaces)
+            : string.Empty;
     }
 
     private void ReportError(GeneratorExecutionContext context, string id, string message, Location? location = null)
