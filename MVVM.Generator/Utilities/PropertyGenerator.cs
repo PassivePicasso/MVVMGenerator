@@ -109,11 +109,16 @@ public class PropertyGenerator
             }
         }
 
-        // Handle DependsOnAttribute
+        // Handle DependsOnAttribute - Look up by field name without the underscore
         var dependsSuffix = string.Empty;
-        if (dependsOnLookup.TryGetValue(propertyName, out var dependsProperties))
+        var lookupName = fieldName.TrimStart('_').TrimStart('s');
+        if (dependsOnLookup.TryGetValue(lookupName, out var dependsProperties))
         {
-            dependsSuffix = string.Join("\r\n", dependsProperties.Select(p => $"OnPropertyChanged(nameof({p}));"));
+            foreach (var p in dependsProperties)
+                dependsSuffix += $"""
+
+                OnPropertyChanged(nameof({p}));
+""";
         }
 
         // Generate the property code
