@@ -1,82 +1,243 @@
-# Instructions for GitHub Copilot
+# Source Generator Architecture Guidelines
 
-## Introduction
-This document provides a focused set of instructions for GitHub Copilot to ensure effective cooperation and alignment of goals. The aim is to enhance the quality, maintainability, and extensibility of software projects by adhering to best practices and design principles.
+## AI Assistant Collaboration Guidelines
 
-## General Principles
+### Interaction Model
+- Suggest changes in small, focused chunks that can be easily reviewed and tested
+- Provide clear rationale for architectural decisions
+- Include specific file paths and affected components
+- Use code blocks with clear boundary markers for changes
+- Highlight potential impact on other components
 
-### Maintainability
-- **Readable Code**: Write clear and understandable code using meaningful names, consistent formatting, and appropriate comments where necessary.
-- **Modular Design**: Organize code into small, reusable modules with a single responsibility, making it easier to maintain and update.
-- **Consistent Naming Conventions**: Adopt and adhere to consistent naming conventions for variables, methods, classes, and other identifiers.
-- **Separation of Concerns**: Separate different aspects of the application (e.g., business logic, data access, and presentation) to reduce complexity and improve maintainability.
+### Communication Format
+- Break down complex changes into sequential steps
+- Group changes by file/component
+- Provide brief context for each modification
+- Use standard markdown for documentation
+- Include relevant code snippets when discussing patterns
 
-### Extensibility
-- **Open/Closed Principle**: Design components to be open for extension but closed for modification, allowing new functionality to be added without altering existing code.
-- **Loose Coupling**: Reduce dependencies between components to enable easier modification and extension. Utilize interfaces and dependency injection to decouple components.
-- **Interface-Based Design**: Use interfaces or abstract classes to define contracts, facilitating flexible implementations and easier testing.
+## Core Architecture
 
-### Avoiding Anti-Patterns
-- **Avoid God Objects**: Prevent any single class or module from having excessive responsibilities. Break down large classes into smaller, focused ones.
-- **Prevent Tight Coupling**: Avoid situations where changes in one component necessitate changes in another. Use design patterns and dependency injection to minimize coupling.
-- **Eliminate Code Smells**: Be vigilant for indicators of poor design or implementation choices, such as duplicated code, long methods, or excessive parameters.
+### Design Principles
+- Maintain strict separation of concerns
+- Keep generator logic independent of generated code
+- Use interfaces to define clear boundaries
+- Implement incremental generation
 
-### Embracing Design Patterns
-- **Appropriate Use of Patterns**: Implement established design patterns (e.g., Factory, Singleton, Observer) where they provide clear benefits.
-- **Consistency in Patterns**: Apply design patterns consistently across the project to maintain a cohesive architecture.
-- **Custom Patterns**: Develop custom patterns when necessary, ensuring they are well-documented and understood by the team.
+### Component Structure
 
-## Design Principles
+```csharp
+public interface ICodeGenerator 
+{
+    void Initialize(IncrementalGeneratorInitializationContext context);
+    void Execute(SourceProductionContext context, ISymbol targetSymbol);
+}
+```
 
-### Code Organization
-- **Project Structure**: Arrange the project logically, grouping related components and functionalities together.
-- **Namespaces and Modules**: Use namespaces and modules effectively to organize code and prevent naming conflicts.
-- **Layered Architecture**: Implement a layered architecture (e.g., presentation, business logic, data access layers) to separate concerns.
+### Implementation Patterns
+- Use incremental generators for performance
+- Implement clear separation of concerns
+- Follow interface-based design
+- Cache expensive computations
 
-### Coding Standards
-- **Style Guidelines**: Follow consistent coding styles, including naming conventions, indentation, and formatting.
-- **Language Features**: Utilize language features appropriately, avoiding deprecated or obsolete constructs.
-- **Error Handling**: Implement consistent error handling strategies, using exceptions where appropriate and avoiding silent failures.
+### Generator Implementation Pattern
+
+```csharp
+[Generator]
+public class ViewModelGenerator : IIncrementalGenerator
+{
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        IncrementalValuesProvider<ClassDeclarationSyntax> classes = 
+            context.SyntaxProvider
+                .CreateSyntaxProvider(
+                    predicate: (s, _) => s is ClassDeclarationSyntax c && IsTargetType(c),
+                    transform: (ctx, _) => GetTargetType(ctx))
+                .Where(m => m is not null);
+                
+        context.RegisterSourceOutput(classes, Execute);
+    }
+}
+```
+
+## Clean Architecture Implementation
+
+### Layer Separation
+- Generator Core (Domain Logic)
+  - Attribute processing
+  - Code generation rules
+  - Model transformations
+- Infrastructure
+  - Roslyn integration
+  - File system access
+  - Diagnostic reporting
+- Presentation
+  - Generated code structure
+  - Code formatting
+  - Source mapping
+
+### Dependency Management
+- Flow dependencies from outer to inner layers
+- Use interfaces to define boundaries
+- Implement dependency injection where appropriate
+- Avoid circular dependencies
+
+## Extension Points
+
+### Generator Pipeline
+- Pre-generation hooks
+- Post-generation validation
+- Custom attribute handling
+- Code transformation plugins
+
+### Code Generation
+- Template customization
+- Naming conventions
+- Output formatting
+- Custom generators
+
+## Best Practices
 
 ### Performance
-- **Efficient Algorithms**: Choose appropriate algorithms and data structures, optimizing for performance where necessary.
-- **Profiling and Optimization**: Regularly profile the application to identify bottlenecks and optimize critical code paths.
-- **Resource Management**: Manage resources such as memory and network connections efficiently to prevent leaks and ensure scalability.
+- Use object pooling for frequent allocations
+- Cache compilation artifacts
+- Implement proper disposal patterns
+- Profile generator performance
 
-### Testing
-- **Automated Testing**: Implement comprehensive automated tests, including unit tests, integration tests, and end-to-end tests.
-- **Test Coverage**: Strive for high test coverage, focusing on critical components and complex logic.
-- **Continuous Testing**: Integrate testing into the development workflow to detect issues early and facilitate continuous integration.
+Example:
+```csharp
+private static readonly ObjectPool<StringBuilder> _stringBuilderPool = 
+    new DefaultObjectPoolProvider().CreateStringBuilderPool();
 
-### Documentation
-- **Inline Comments**: Use comments to explain complex logic or non-obvious implementation details.
-- **API Documentation**: Document public APIs and interfaces clearly, providing guidance on expected usage and behavior.
-- **Architecture Documentation**: Maintain up-to-date documentation of the system architecture and design decisions.
+public string GenerateCode()
+{
+    using var builder = _stringBuilderPool.Get();
+    // Generate code
+    return builder.ToString();
+}
+```
 
-### Security
-- **Secure Coding Practices**: Follow secure coding guidelines to prevent vulnerabilities such as injections, cross-site scripting, and buffer overflows.
-- **Authentication and Authorization**: Implement robust authentication and authorization mechanisms where applicable.
-- **Data Protection**: Ensure sensitive data is handled securely, including encryption and secure storage practices.
+### Error Handling
+- Provide clear, actionable diagnostic messages
+- Include source locations in errors
+- Handle edge cases gracefully
 
-### Continuous Integration and Delivery
-- **Build Automation**: Automate the build process to ensure consistency and repeatability.
-- **Continuous Integration**: Use continuous integration tools to automatically build and test the codebase upon changes.
-- **Deployment Automation**: Automate deployment processes to reduce errors and accelerate release cycles.
+Example:
+```csharp
+context.ReportDiagnostic(Diagnostic.Create(
+    new DiagnosticDescriptor(
+        id: "MVVM001",
+        title: "Invalid property configuration",
+        messageFormat: "Property '{0}' has invalid configuration: {1}",
+        category: "MVVM",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true),
+    Location.Create(syntax.SyntaxTree, syntax.Span),
+    propertyName, details));
+```
 
-## Best Practices for Code Generation Tools
-If the project involves code generation mechanisms, such as source generators:
-- **Incremental Generation**: Implement incremental generation to improve performance by only regenerating code when necessary.
-- **Efficient Parsing**: Use efficient parsing techniques to analyze source code without introducing significant overhead.
-- **Diagnostic Reporting**: Provide clear and actionable diagnostic messages for errors and warnings encountered during generation.
-- **Thread Safety**: Ensure that code generation tools are thread-safe, as they may be invoked concurrently.
-- **Performance Optimization**: Minimize impact on build times by optimizing code generation logic and avoiding expensive computations.
-- **Testing Generators**: Write tests specifically for code generation tools to verify correctness and reliability.
+## Performance Guidelines
 
-## Structuring Updates
-- **Incremental Changes**: Make small, incremental changes to the codebase to facilitate quick testing and validation.
-- **Frequent Compiling**: Compile and evaluate the results frequently to catch issues early and maintain forward momentum.
-- **Iterative Testing**: Test each change iteratively to ensure that new code integrates well with existing functionality and does not introduce regressions.
-- **Clear Commit Messages**: Use clear and descriptive commit messages to document the purpose and scope of each change.
+### Optimization Strategies
+- Cache compilation artifacts
+- Implement incremental generation
+- Pool frequently used objects
+- Minimize allocations
 
-## Conclusion
-Adhering to these instructions will enhance the quality, maintainability, and extensibility of software projects. By focusing on best practices and continuously refining the architecture, we can incrementally move towards an optimal design. Regular collaboration and code reviews will ensure that these principles are effectively applied throughout the development process.
+### Resource Management
+- Proper disposal patterns
+- Memory usage monitoring
+- Thread safety considerations
+- Compilation context reuse
+
+## Error Handling and Diagnostics
+
+### Diagnostic System
+- Clear error messages
+- Source location tracking
+- Action suggestions
+- Warning levels
+
+### Error Recovery
+- Graceful degradation
+- Partial generation
+- State recovery
+- Error reporting
+
+### Integration Tests
+- Test end-to-end generation
+- Verify compilation
+- Test with different C# versions
+- Benchmark performance
+
+## Implementation Process
+
+### Development Workflow
+1. Design changes in small, testable increments
+2. Document architectural decisions
+3. Implement core functionality
+4. Add extension points
+5. Optimize performance
+6. Add diagnostics
+
+### Change Management
+- Review impact before implementation
+- Test changes incrementally
+- Document breaking changes
+- Update affected components
+
+## Documentation Requirements
+1. Document generator architecture
+2. Provide usage examples
+3. Include troubleshooting guide
+4. Document breaking changes
+5. Maintain API documentation
+
+## Security Considerations
+
+### Input Validation
+- Syntax validation
+- Semantic analysis
+- Malformed input handling
+- Injection prevention
+
+### Generated Code Safety
+- Output sanitization
+- Safe default values
+- Access control verification
+- Security annotations
+
+## Implementation Checklist
+- [ ] Implement IIncrementalGenerator
+- [ ] Set up error handling
+- [ ] Add comprehensive tests
+- [ ] Document public APIs
+- [ ] Profile performance
+- [ ] Add source mapping
+- [ ] Implement diagnostics
+
+## Performance Monitoring
+- Track generation time
+- Monitor memory usage
+- Profile hot paths
+- Optimize critical sections
+
+## Security Considerations
+- Validate input syntax
+- Sanitize generated code
+- Handle malformed input
+- Protect against injection
+
+## Documentation Standards
+
+### Code Documentation
+- Clear XML comments
+- Usage examples
+- Extension points
+- Breaking changes
+
+### Architecture Documentation
+- Component relationships
+- Extension mechanisms
+- Performance considerations
+- Security guidelines
