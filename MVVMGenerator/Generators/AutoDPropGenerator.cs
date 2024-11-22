@@ -10,7 +10,7 @@ namespace MVVM.Generator.Generators
     [Generator]
     internal class AutoDPropGenerator : AttributeGeneratorHandler<IFieldSymbol, AutoDPropAttribute>
     {
-        protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol, SemanticModel model)
+        protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)
         {
             usings.Add("using System.Windows;");
             NamespaceExtractor.AddNamespaceUsings(usings, fieldSymbol.Type);
@@ -24,7 +24,7 @@ namespace MVVM.Generator.Generators
         }
 
 
-        protected override void AddStaticFields(List<string> fields, IFieldSymbol fieldSymbol, SemanticModel model)
+        protected override void AddStaticFields(List<string> fields, IFieldSymbol fieldSymbol)
         {
             string name = GetName(fieldSymbol);
             fields.Add($$"""
@@ -36,7 +36,7 @@ namespace MVVM.Generator.Generators
                 """);
         }
 
-        protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol, SemanticModel model)
+        protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol)
         {
             string type = GetReturnedType(fieldSymbol);
             string name = GetName(fieldSymbol);

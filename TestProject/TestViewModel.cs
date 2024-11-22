@@ -1,6 +1,5 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.Text.Json.Serialization;
 using System.Windows;
 
 using EnumTypes;
@@ -8,6 +7,7 @@ using EnumTypes;
 using MVVM.Generator.Attributes;
 
 using Newtonsoft.Json.Converters;
+using Newtonsoft.Json;
 
 
 namespace TestProject
@@ -28,16 +28,11 @@ namespace TestProject
 
         [AutoNotify(PropertyChangedHandlerName = nameof(IsOpenedChanged))]
         private bool isOpen;
-        private void IsOpenedChanged(object? sender, EventArgs args)
-        {
-        }
+        private void IsOpenedChanged(object? sender, EventArgs args) { }
 
         [AutoNotify(CollectionChangedHandlerName = nameof(OnCollectionChanged))]
         private ObservableCollection<string> collection = new ObservableCollection<string>();
-
-        public void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
-        {
-        }
+        public void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args) { }
 
         [AutoCommand(nameof(CanExecuteClose))]
         public void Close() => IsOpen = false;
@@ -46,9 +41,7 @@ namespace TestProject
         //[AutoCommand]
         //private void BrokenTest()
         //{
-
         //}
-
 
         [AutoCommand]
         public void Test(int input)

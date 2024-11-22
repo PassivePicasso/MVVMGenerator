@@ -20,7 +20,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
     private const string AttrTypeName = nameof(AutoNotifyAttribute);
     private const string INCCName = nameof(INotifyCollectionChanged);
 
-    protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol, SemanticModel model)
+    protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)
     {
         usings.Add("using System.ComponentModel;");
         usings.Add("using System.Runtime.CompilerServices;");
@@ -54,7 +54,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
             usings.Add("using System.Collections.Specialized;");
     }
 
-    protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol, SemanticModel model)
+    protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol)
     {
         var name = fieldSymbol.Name;
         var type = TypeHelper.GetTypeName(fieldSymbol.Type);
@@ -115,12 +115,14 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
                             string handlerFieldName = $"_{name}ChangedHandler";
                             defines = $$"""
-    private EventHandler {{handlerFieldName}};
+
+        private EventHandler {{handlerFieldName}};
 """;
 
                             suffix = $$"""
 
-                {{handlerFieldName}} ??= {{methodName}};
+                if ({{handlerFieldName}} == null)
+                    {{handlerFieldName}} = {{methodName}};
                 {{handlerFieldName}}.Invoke(this, EventArgs.Empty);
 """;
                         }
@@ -138,9 +140,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
                             ValidateCollectionChangedHandler(methodName, containingType, matchedMethodSymbol);
 
                             string handlerFieldName = $"_{name}CollectionChangedHandler";
-                            defines = $$"""
-    private NotifyCollectionChangedEventHandler {{handlerFieldName}};
-""";
+                            defines = $"private NotifyCollectionChangedEventHandler {handlerFieldName};";
                             prefix = $$"""
 
                 if ({{name}} != null && {{handlerFieldName}} != null)
@@ -164,7 +164,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
         // Existing logic for properties that do not implement INotifyCollectionChanged
         properties.Add($$"""
-{{defines}}{{propertyAttributesString}}
+        {{defines}}{{propertyAttributesString}}
         public {{staticString}}{{virtualPrefix}}{{type}} {{name.Substring(0, 1).ToUpper()}}{{name.Substring(1)}}
         {
             {{getVisibility}}get => {{name}};
@@ -176,7 +176,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         }
 """);
     }
-    protected override void AddInterfaceImplementations(List<string> impls, IFieldSymbol fieldSymbol, SemanticModel model)
+    protected override void AddInterfaceImplementations(List<string> impls, IFieldSymbol fieldSymbol)
     {
         impls.Add($$"""
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -186,7 +186,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         }
 """);
     }
-    protected override void AddInterfaces(List<string> interfaces, IFieldSymbol fieldSymbol, SemanticModel model)
+    protected override void AddInterfaces(List<string> interfaces, IFieldSymbol fieldSymbol)
     {
         interfaces.Add("INotifyPropertyChanged");
     }
@@ -232,7 +232,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
         if (propertyAttributes.Count > 0)
             return $"""
-    [{propertyAttributes.Aggregate((a, b) => $"{a}, {b}")}]
+[{propertyAttributes.Aggregate((a, b) => $"{a}, {b}")}]
 """;
         return string.Empty;
     }

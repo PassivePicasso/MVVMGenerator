@@ -12,10 +12,10 @@ namespace MVVM.Generator.Generators;
 [Generator]
 internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, AutoCommandAttribute>
 {
-    protected override void AddUsings(List<string> usings, IMethodSymbol symbol, SemanticModel model)
+    protected override void AddUsings(List<string> usings, IMethodSymbol symbol)
     {
         usings.Add("using System.Windows.Input;");
-        usings.Add("using System.Text.Json.Serialization;");
+        usings.Add("using Newtonsoft.Json;");
         if (symbol.Parameters.Length > 0)
         {
             NamespaceExtractor.AddNamespaceUsings(usings, symbol.Parameters[0].Type);
@@ -23,7 +23,7 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
     }
 
     string GetCommandClassName(IMethodSymbol symbol) => $$"""{{symbol.Name}}CommandClass""";
-    protected override void AddNestedClasses(List<string> definitions, IMethodSymbol symbol, SemanticModel model)
+    protected override void AddNestedClasses(List<string> definitions, IMethodSymbol symbol)
     {
         if (IsOverrideWithAutoCommand(symbol)) return;
         if (symbol.DeclaredAccessibility != Accessibility.Public) return;
@@ -36,30 +36,33 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
         string canExecute;
         string callerSource = symbol.IsStatic ? symbol.ContainingType.Name : "_owner";
 
-        methodCall = $"\t\t\t\t{callerSource}.{symbol.Name}();";
+        methodCall = $"""
+                {callerSource}.{symbol.Name}();
+""";
         canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
             ? $"""
-                            return {callerSource}.{canExecuteMethodName}();
-                """
+                return {callerSource}.{canExecuteMethodName}();
+"""
             : """
-                            return true;
-            """;
+                return true;
+""";
 
         if (symbol.Parameters.Length == 1)
         {
             string parameterType = symbol.Parameters[0].Type.Name;
             methodCall = $$"""
-                            if(parameter is not {{parameterType}} typedParameter) return;
-                                {{callerSource}}.{{symbol.Name}}(typedParameter);
-                """;
+                if(parameter is not {{parameterType}} typedParameter) return;
+                    {{callerSource}}.{{symbol.Name}}(typedParameter);
+""";
 
             canExecute = !string.IsNullOrEmpty(canExecuteMethodName)
                        ? $$"""
-                            if(parameter is not {{parameterType}} typedParameter) return false;
-                                return {{callerSource}}.{{canExecuteMethodName}}(typedParameter);
-                """
-                       : $"\t\t\t\treturn parameter is {parameterType};"
-            ;
+                if(parameter is not {{parameterType}} typedParameter) return false;
+                    return {{callerSource}}.{{canExecuteMethodName}}(typedParameter);
+"""
+                       : $"""
+                return parameter is {parameterType};
+""";
         }
 
         var ownerField = symbol.IsStatic
@@ -69,34 +72,35 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
             : $$"""
             readonly {{symbol.ContainingType.Name}} _owner;
 
-    """;
+""";
 
+        var ctorBody = symbol.IsStatic ? string.Empty : $"""
+                _owner = owner;
+""";
         var constructor = $$"""
             public {{className}}({{(symbol.IsStatic ? string.Empty : $"{symbol.ContainingType.Name} owner")}})
-                {
-                {{(symbol.IsStatic ? string.Empty : """
-                _owner = owner;
-        """)}}
-                }
-    """;
+            {
+{{ctorBody}}
+            }
+""";
 
         definitions.Add($$"""
         public class {{className}} : ICommand
+        {
+            public event EventHandler CanExecuteChanged = delegate { };
+{{ownerField}}
+{{constructor}}
+            public bool CanExecute(object? parameter) 
             {
-                public event EventHandler CanExecuteChanged = delegate { };
-    {{ownerField}}
-    {{constructor}}
-                public bool CanExecute(object? parameter) 
-                {
-    {{canExecute}}
-                }
-
-                public void Execute(object? parameter)
-                {
-    {{methodCall}} 
-                }
+{{canExecute}}
             }
-    """);
+
+            public void Execute(object? parameter)
+            {
+{{methodCall}} 
+            }
+        }
+""");
     }
 
     public string GetCanExecuteMethodName(IMethodSymbol methodSymbol)
@@ -159,18 +163,18 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
     }
     string GetFieldName(IMethodSymbol symbol) => $$"""{{symbol.Name.Substring(0, 1).ToLower()}}{{symbol.Name.Substring(1)}}Command""";
 
-    protected override void AddFields(List<string> definitions, IMethodSymbol symbol, SemanticModel model)
+    protected override void AddFields(List<string> definitions, IMethodSymbol symbol)
         => definitions.Add($$"""
-                [JsonIgnore]
-                    private ICommand? {{GetFieldName(symbol)}};
-            """);
+        [JsonIgnore]
+        private ICommand? {{GetFieldName(symbol)}};
+""");
 
-    protected override void AddProperties(List<string> definitions, IMethodSymbol symbol, SemanticModel model)
+    protected override void AddProperties(List<string> definitions, IMethodSymbol symbol)
     {
         var className = GetCommandClassName(symbol);
         var fieldName = GetFieldName(symbol);
         definitions.Add($$"""
-                [JsonIgnore]
+                    [JsonIgnore]
                     public ICommand {{symbol.Name}}Command => {{fieldName}} ??= new {{className}}({{(symbol.IsStatic ? string.Empty : "this")}});
             """);
     }

@@ -1,14 +1,14 @@
-﻿using Microsoft.CodeAnalysis;
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+
+using Microsoft.CodeAnalysis;
 
 namespace MVVM.Generator.Generators
 {
     internal interface IAttributeGenerator
     {
-        void Process(BaseAttributeGenerator generator, INamedTypeSymbol classSymbol, SemanticModel model);
+        void Process(BaseAttributeGenerator generator, INamedTypeSymbol classSymbol);
     }
     internal abstract class AttributeGeneratorHandler<Symbol, Attribute> : IAttributeGenerator
         where Symbol : ISymbol
@@ -29,7 +29,7 @@ namespace MVVM.Generator.Generators
             }
         }
 
-        public void Process(BaseAttributeGenerator generator, INamedTypeSymbol classSymbol, SemanticModel model)
+        public void Process(BaseAttributeGenerator generator, INamedTypeSymbol classSymbol)
         {
             if (!classSymbol.GetMembers().Any(SymbolContainsAttribute)) return;
 
@@ -40,26 +40,26 @@ namespace MVVM.Generator.Generators
 
             foreach (var tSymbol in symbols.OfType<Symbol>())
             {
-                AddUsings/*                  */(generator.usings,/*                  */tSymbol, model);
-                AddInterfaces/*              */(generator.interfaces,/*              */tSymbol, model);
-                AddNestedClasses/*           */(generator.nestedClasses,/*           */tSymbol, model);
-                AddInterfaceImplementations/**/(generator.interfaceImplementations,/**/tSymbol, model);
-                AddFields/*                  */(generator.fields,/*                  */tSymbol, model);
-                AddProperties/*              */(generator.properties,/*              */tSymbol, model);
-                AddStaticFields/*            */(generator.staticFields,/*            */tSymbol, model);
-                AddStaticProperties/*        */(generator.staticProperties,/*        */tSymbol, model);
+                AddUsings/*                  */(generator.usings,/*                  */tSymbol);
+                AddInterfaces/*              */(generator.interfaces,/*              */tSymbol);
+                AddNestedClasses/*           */(generator.nestedClasses,/*           */tSymbol);
+                AddInterfaceImplementations/**/(generator.interfaceImplementations,/**/tSymbol);
+                AddFields/*                  */(generator.fields,/*                  */tSymbol);
+                AddProperties/*              */(generator.properties,/*              */tSymbol);
+                AddStaticFields/*            */(generator.staticFields,/*            */tSymbol);
+                AddStaticProperties/*        */(generator.staticProperties,/*        */tSymbol);
             }
         }
 
 
-        protected virtual void AddUsings(List<string> definitions, Symbol symbol, SemanticModel model) { }
-        protected virtual void AddInterfaces(List<string> definitions, Symbol symbol, SemanticModel model) { }
-        protected virtual void AddNestedClasses(List<string> definitions, Symbol symbol, SemanticModel model) { }
-        protected virtual void AddStaticFields(List<string> definitions, Symbol symbol, SemanticModel model) { }
-        protected virtual void AddStaticProperties(List<string> definitions, Symbol symbol, SemanticModel model) { }
-        protected virtual void AddInterfaceImplementations(List<string> definitions, Symbol symbol, SemanticModel model) { }
-        protected virtual void AddFields(List<string> definitions, Symbol symbol, SemanticModel model) { }
-        protected virtual void AddProperties(List<string> definitions, Symbol symbol, SemanticModel model) { }
+        protected virtual void AddUsings(List<string> definitions, Symbol symbol) { }
+        protected virtual void AddInterfaces(List<string> definitions, Symbol symbol) { }
+        protected virtual void AddNestedClasses(List<string> definitions, Symbol symbol) { }
+        protected virtual void AddStaticFields(List<string> definitions, Symbol symbol) { }
+        protected virtual void AddStaticProperties(List<string> definitions, Symbol symbol) { }
+        protected virtual void AddInterfaceImplementations(List<string> definitions, Symbol symbol) { }
+        protected virtual void AddFields(List<string> definitions, Symbol symbol) { }
+        protected virtual void AddProperties(List<string> definitions, Symbol symbol) { }
 
 
         protected string GetReturnedType(Symbol symbol)
