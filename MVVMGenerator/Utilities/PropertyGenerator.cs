@@ -123,11 +123,9 @@ public class PropertyGenerator
         {
             {{getVisibility}}get => {{fieldName}};
             {{setVisibility}}set
-            {
-                {{prefix}}
+            {{{prefix}}
                 {{fieldName}} = value;{{suffix}}
-                OnPropertyChanged();
-                {{dependsSuffix}}
+                OnPropertyChanged();{{dependsSuffix}}
             }
         }
 """);
