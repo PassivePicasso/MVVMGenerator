@@ -10,16 +10,16 @@ using MVVM.Generator.Attributes;
 
 namespace MVVM.Generator.Analyzers;
 
-using static MVVM.Generator.Diagnostics.Descriptors;
+using static MVVM.Generator.Diagnostics.Descriptors.Analzyer;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public class AutoCommandAnalyzer : DiagnosticAnalyzer
 {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [
-            AutoCommandDiagnostics.NotPublic,
-            AutoCommandDiagnostics.TooManyParameters,
-            AutoCommandDiagnostics.InvalidCanExecute,
-            AutoCommandDiagnostics.NamingConflict,
+            AutoCommand.NotPublic,
+            AutoCommand.TooManyParameters,
+            AutoCommand.InvalidCanExecute,
+            AutoCommand.NamingConflict,
         ];
 
     public override void Initialize(AnalysisContext context)
@@ -59,7 +59,7 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
         if (methodSymbol.DeclaredAccessibility != Accessibility.Public)
         {
             context.ReportDiagnostic(Diagnostic.Create(
-                AutoCommandDiagnostics.NotPublic,
+                AutoCommand.NotPublic,
                 methodDeclaration.Identifier.GetLocation(),
                 methodSymbol.Name));
             return false;
@@ -72,7 +72,7 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
         if (methodSymbol.Parameters.Length > 1)
         {
             context.ReportDiagnostic(Diagnostic.Create(
-                AutoCommandDiagnostics.TooManyParameters,
+                AutoCommand.TooManyParameters,
                 methodDeclaration.Identifier.GetLocation(),
                 methodSymbol.Name));
             return false;
@@ -133,7 +133,7 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
     private static void ReportCanExecuteError(SyntaxNodeAnalysisContext context, MethodDeclarationSyntax methodDeclaration, IMethodSymbol methodSymbol, string canExecuteMethodName, string error)
     {
         context.ReportDiagnostic(Diagnostic.Create(
-            AutoCommandDiagnostics.InvalidCanExecute,
+            AutoCommand.InvalidCanExecute,
             methodDeclaration.Identifier.GetLocation(),
             canExecuteMethodName,
             methodSymbol.Name,
@@ -156,7 +156,7 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
         if (existingMembers.Contains(commandClassName))
         {
             context.ReportDiagnostic(Diagnostic.Create(
-                AutoCommandDiagnostics.NamingConflict,
+                AutoCommand.NamingConflict,
                 methodDeclaration.Identifier.GetLocation(),
                 commandClassName));
         }

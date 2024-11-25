@@ -10,38 +10,66 @@ namespace MVVM.Generator.Diagnostics;
 public sealed class DiagnosticReporter : IDiagnosticReporter
 {
     private readonly SourceProductionContext _context;
-    private readonly ConcurrentQueue<Diagnostic> _batchedDiagnostics;
+    private readonly ConcurrentBag<Diagnostic> _batchedDiagnostics;
+    private volatile bool _isFlushing;
 
     public DiagnosticReporter(SourceProductionContext context)
     {
         _context = context;
-        _batchedDiagnostics = new ConcurrentQueue<Diagnostic>();
+        _batchedDiagnostics = new ConcurrentBag<Diagnostic>();
+
+        // Register flush on completion
+        context.CancellationToken.Register(FlushBatchedDiagnostics);
     }
 
     public void Report(DiagnosticDescriptor descriptor, Location? location = null, params object[] messageArgs)
     {
         var diagnostic = Diagnostic.Create(descriptor, location, messageArgs);
-        _context.ReportDiagnostic(diagnostic);
+
+        // Fast path for immediate reporting
+        if (!_isFlushing)
+        {
+            _context.ReportDiagnostic(diagnostic);
+            return;
+        }
+
+        // Fallback to batch if currently flushing
+        _batchedDiagnostics.Add(diagnostic);
     }
+
     public void Report(DiagnosticDescriptor descriptor, SyntaxNode node, params object[] messageArgs)
     {
         Report(descriptor, node.GetLocation(), messageArgs);
     }
+
     public void ReportBatch(IEnumerable<(DiagnosticDescriptor Descriptor, Location? Location, object[] Args)> diagnostics)
     {
         foreach (var (descriptor, location, args) in diagnostics)
         {
             var diagnostic = Diagnostic.Create(descriptor, location, args);
-            _batchedDiagnostics.Enqueue(diagnostic);
+            _batchedDiagnostics.Add(diagnostic);
         }
 
         FlushBatchedDiagnostics();
     }
+
     private void FlushBatchedDiagnostics()
     {
-        while (_batchedDiagnostics.TryDequeue(out var diagnostic))
+        if (_isFlushing)
+            return;
+
+        _isFlushing = true;
+
+        try
         {
-            _context.ReportDiagnostic(diagnostic);
+            while (_batchedDiagnostics.TryTake(out var diagnostic))
+            {
+                _context.ReportDiagnostic(diagnostic);
+            }
+        }
+        finally
+        {
+            _isFlushing = false;
         }
     }
 }

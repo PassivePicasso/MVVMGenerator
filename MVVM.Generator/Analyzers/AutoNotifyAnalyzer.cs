@@ -9,9 +9,11 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 using MVVM.Generator.Attributes;
-using MVVM.Generator.Diagnostics;
+using MVVM.Generator.Interfaces;
 
 namespace MVVM.Generator.Analyzers;
+
+using static MVVM.Generator.Diagnostics.Descriptors.Analzyer;
 
 /// <summary>
 /// Analyzer for AutoNotify attribute usage that validates field declarations and their associated handlers
@@ -20,12 +22,13 @@ namespace MVVM.Generator.Analyzers;
 public class AutoNotifyAnalyzer : DiagnosticAnalyzer
 {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(
-            Descriptors.AutoNotifyDiagnostics.StaticField,
-            Descriptors.AutoNotifyDiagnostics.NamingConflict,
-            Descriptors.AutoNotifyDiagnostics.InvalidPropertyChangedHandler,
-            Descriptors.AutoNotifyDiagnostics.InvalidCollectionChangedHandler
-        );
+        [
+            AutoNotify.StaticField,
+            AutoNotify.NamingConflict,
+            AutoNotify.InvalidPropertyChangedHandler,
+            AutoNotify.InvalidCollectionChangedHandler
+,
+        ];
 
     public override void Initialize(AnalysisContext context)
     {
@@ -70,7 +73,7 @@ public class AutoNotifyAnalyzer : DiagnosticAnalyzer
         if (fieldSymbol.IsStatic)
         {
             context.ReportDiagnostic(Diagnostic.Create(
-                Descriptors.AutoNotifyDiagnostics.StaticField,
+                AutoNotify.StaticField,
                 fieldDeclaration.GetLocation(),
                 fieldSymbol.Name));
             return;
@@ -84,7 +87,7 @@ public class AutoNotifyAnalyzer : DiagnosticAnalyzer
         if (existingMembers.Contains(propertyName))
         {
             context.ReportDiagnostic(Diagnostic.Create(
-                Descriptors.AutoNotifyDiagnostics.NamingConflict,
+                AutoNotify.NamingConflict,
                 fieldDeclaration.GetLocation(),
                 propertyName));
         }
@@ -118,7 +121,7 @@ public class AutoNotifyAnalyzer : DiagnosticAnalyzer
         if (!IsValidEventHandler(handlerName, fieldSymbol.ContainingType))
         {
             context.ReportDiagnostic(Diagnostic.Create(
-                Descriptors.AutoNotifyDiagnostics.InvalidPropertyChangedHandler,
+                AutoNotify.InvalidPropertyChangedHandler,
                 fieldDeclaration.GetLocation(),
                 handlerName,
                 fieldSymbol.Name,
@@ -133,7 +136,7 @@ public class AutoNotifyAnalyzer : DiagnosticAnalyzer
         if (!IsValidCollectionChangedHandler(handlerName, fieldSymbol.ContainingType))
         {
             context.ReportDiagnostic(Diagnostic.Create(
-                Descriptors.AutoNotifyDiagnostics.InvalidCollectionChangedHandler,
+                AutoNotify.InvalidCollectionChangedHandler,
                 fieldDeclaration.GetLocation(),
                 handlerName,
                 fieldSymbol.Name,

@@ -1,29 +1,26 @@
-﻿using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CodeActions;
-using Microsoft.CodeAnalysis.CodeFixes;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-
-using MVVM.Generator.Diagnostics;
-
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Composition;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CodeActions;
+using Microsoft.CodeAnalysis.CodeFixes;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
 namespace MVVM.Generator.CodeFixers;
+using static MVVM.Generator.Diagnostics.Descriptors.Analzyer;
 
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(AutoCommandCodeFixProvider)), Shared]
 public class AutoCommandCodeFixProvider : CodeFixProvider
 {
     private const string MakePublicTitle = "Make method public";
 
-    public sealed override ImmutableArray<string> FixableDiagnosticIds =>
-        ImmutableArray.Create(Descriptors.AutoCommandDiagnostics.NotPublic.Id);
+    public sealed override ImmutableArray<string> FixableDiagnosticIds => [AutoCommand.NotPublic.Id];
 
-    public sealed override FixAllProvider GetFixAllProvider() =>
-        WellKnownFixAllProviders.BatchFixer;
+    public sealed override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
 
     public sealed override async Task RegisterCodeFixesAsync(CodeFixContext context)
     {
