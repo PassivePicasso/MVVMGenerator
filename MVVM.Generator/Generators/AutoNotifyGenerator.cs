@@ -96,6 +96,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         if (!impls.Any(i => i.Contains("PropertyChanged")))
         {
             impls.Add($$"""
+
         public event PropertyChangedEventHandler? PropertyChanged;
         void OnPropertyChanged([CallerMemberName] string? propertyName = null) 
         {
