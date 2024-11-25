@@ -1,35 +1,29 @@
-﻿using System.Collections.Immutable;
-using System.Composition;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-using MVVM.Generator.Analyzers;
+using MVVM.Generator.Diagnostics;
 
-using Document = Microsoft.CodeAnalysis.Document;
+using System.Collections.Immutable;
+using System.Composition;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace MVVM.Generator.CodeFixers;
 
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(AutoCommandCodeFixProvider)), Shared]
 public class AutoCommandCodeFixProvider : CodeFixProvider
 {
-    private const string title = "Make method public";
+    private const string MakePublicTitle = "Make method public";
 
-    public sealed override ImmutableArray<string> FixableDiagnosticIds
-    {
-        get { return ImmutableArray.Create(AutoCommandAnalyzer.DiagnosticId); }
-    }
+    public sealed override ImmutableArray<string> FixableDiagnosticIds =>
+        ImmutableArray.Create(Descriptors.AutoCommandDiagnostics.NotPublic.Id);
 
-    public sealed override FixAllProvider GetFixAllProvider()
-    {
-        return WellKnownFixAllProviders.BatchFixer;
-    }
+    public sealed override FixAllProvider GetFixAllProvider() =>
+        WellKnownFixAllProviders.BatchFixer;
 
     public sealed override async Task RegisterCodeFixesAsync(CodeFixContext context)
     {
@@ -37,32 +31,26 @@ public class AutoCommandCodeFixProvider : CodeFixProvider
         var diagnosticSpan = diagnostic.Location.SourceSpan;
 
         var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-        var parent = root?.FindToken(diagnosticSpan.Start).Parent;
-        var declaration = parent?.AncestorsAndSelf().OfType<MethodDeclarationSyntax>().First();
-        if (declaration == null)
-            return;
-
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                title: title,
-                createChangedSolution: c => MakePublicAsync(context.Document, declaration, c),
-                equivalenceKey: title),
-            diagnostic);
+        if (root?.FindToken(diagnosticSpan.Start).Parent?.AncestorsAndSelf().OfType<MethodDeclarationSyntax>().FirstOrDefault() is MethodDeclarationSyntax declaration)
+        {
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    title: MakePublicTitle,
+                    createChangedSolution: c => MakePublicAsync(context.Document, declaration, c),
+                    equivalenceKey: MakePublicTitle),
+                diagnostic);
+        }
     }
 
     private async Task<Solution> MakePublicAsync(Document document, MethodDeclarationSyntax methodDecl, CancellationToken cancellationToken)
     {
-        var modifiers = methodDecl.Modifiers;
-        var publicModifier = SyntaxFactory.Token(SyntaxKind.PublicKeyword);
-        var newModifiers = modifiers.Add(publicModifier);
-
-        var newMethodDecl = methodDecl.WithModifiers(newModifiers);
-
         var root = await document.GetSyntaxRootAsync(cancellationToken);
-        if(root == null) return document.Project.Solution;
+        if (root == null) return document.Project.Solution;
+
+        var newMethodDecl = methodDecl.WithModifiers(
+            methodDecl.Modifiers.Add(SyntaxFactory.Token(SyntaxKind.PublicKeyword)));
 
         var newRoot = root.ReplaceNode(methodDecl, newMethodDecl);
-
         return document.Project.Solution.WithDocumentSyntaxRoot(document.Id, newRoot);
     }
 }

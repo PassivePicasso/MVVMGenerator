@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Collections.Specialized;
 using System.Linq;
@@ -10,20 +9,23 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 using MVVM.Generator.Attributes;
+using MVVM.Generator.Diagnostics;
 
 namespace MVVM.Generator.Analyzers;
 
+/// <summary>
+/// Analyzer for AutoNotify attribute usage that validates field declarations and their associated handlers
+/// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public class AutoNotifyAnalyzer : DiagnosticAnalyzer
 {
-    public const string DiagnosticId = "AutoNotifyAnalyzer";
-    private static readonly LocalizableString Title = "AutoNotifyAttribute usage";
-    private static readonly LocalizableString MessageFormat = "Field '{0}' with AutoNotifyAttribute has an issue: {1}";
-    private static readonly LocalizableString Description = "Fields with AutoNotifyAttribute must adhere to specific rules.";
-    private const string Category = "Usage";
-    private static DiagnosticDescriptor Rule = new DiagnosticDescriptor(DiagnosticId, Title, MessageFormat, Category, DiagnosticSeverity.Error, isEnabledByDefault: true, description: Description);
-
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
+        ImmutableArray.Create(
+            Descriptors.AutoNotifyDiagnostics.StaticField,
+            Descriptors.AutoNotifyDiagnostics.NamingConflict,
+            Descriptors.AutoNotifyDiagnostics.InvalidPropertyChangedHandler,
+            Descriptors.AutoNotifyDiagnostics.InvalidCollectionChangedHandler
+        );
 
     public override void Initialize(AnalysisContext context)
     {
@@ -34,149 +36,175 @@ public class AutoNotifyAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeNode(SyntaxNodeAnalysisContext context)
     {
-        if (context.Node.SyntaxTree.FilePath.EndsWith(".g.cs"))
+        // Skip generated files
+        if (context.Node.SyntaxTree.FilePath.EndsWith(".Generated.cs", StringComparison.OrdinalIgnoreCase))
         {
-            return; // Skip generated code
+            return;
         }
 
         var fieldDeclaration = (FieldDeclarationSyntax)context.Node;
-        var attributes = fieldDeclaration.AttributeLists.SelectMany(al => al.Attributes);
-        foreach (var attribute in attributes)
+
+        // Find AutoNotify attributes
+        var autoNotifyAttribute = fieldDeclaration.AttributeLists
+            .SelectMany(al => al.Attributes)
+            .FirstOrDefault(attr => IsAutoNotifyAttribute(context, attr));
+
+        if (autoNotifyAttribute == null) return;
+
+        var fieldSymbol = context.SemanticModel.GetDeclaredSymbol(fieldDeclaration.Declaration.Variables.First()) as IFieldSymbol;
+        if (fieldSymbol == null) return;
+
+        ValidateField(context, fieldDeclaration, fieldSymbol);
+        ValidateHandlers(context, fieldDeclaration, fieldSymbol);
+    }
+
+    private static bool IsAutoNotifyAttribute(SyntaxNodeAnalysisContext context, AttributeSyntax attribute)
+    {
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(attribute);
+        return symbolInfo.Symbol?.ContainingType.Name == "AutoNotifyAttribute";
+    }
+
+    private static void ValidateField(SyntaxNodeAnalysisContext context, FieldDeclarationSyntax fieldDeclaration, IFieldSymbol fieldSymbol)
+    {
+        // Check for static fields
+        if (fieldSymbol.IsStatic)
         {
-            var symbolInfo = context.SemanticModel.GetSymbolInfo(attribute);
-            if (symbolInfo.Symbol?.ContainingType.Name == "AutoNotifyAttribute")
+            context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.AutoNotifyDiagnostics.StaticField,
+                fieldDeclaration.GetLocation(),
+                fieldSymbol.Name));
+            return;
+        }
+
+        // Check for naming conflicts
+        var propertyName = GetPropertyName(fieldSymbol);
+        var containingType = fieldSymbol.ContainingType;
+        var existingMembers = GetNonGeneratedMembers(containingType);
+
+        if (existingMembers.Contains(propertyName))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.AutoNotifyDiagnostics.NamingConflict,
+                fieldDeclaration.GetLocation(),
+                propertyName));
+        }
+    }
+
+    private static void ValidateHandlers(SyntaxNodeAnalysisContext context, FieldDeclarationSyntax fieldDeclaration, IFieldSymbol fieldSymbol)
+    {
+        var attributeData = fieldSymbol.GetAttributes()
+            .FirstOrDefault(ad => ad.AttributeClass?.Name == "AutoNotifyAttribute");
+
+        if (attributeData == null) return;
+
+        foreach (var namedArg in attributeData.NamedArguments)
+        {
+            switch (namedArg.Key)
             {
-                var fieldSymbol = context.SemanticModel.GetDeclaredSymbol(fieldDeclaration.Declaration.Variables.First()) as IFieldSymbol;
-                if (fieldSymbol == null) continue;
-
-                // Check if the field is static
-                if (fieldSymbol.IsStatic)
-                {
-                    ReportDiagnostic(context, fieldDeclaration, fieldSymbol, "Field must not be static.");
-                    continue;
-                }
-
-                // Check for naming conflicts
-                var propertyName = GetPropertyName(fieldSymbol);
-                var containingType = fieldSymbol.ContainingType;
-                var containedMembers = containingType.GetMembers();
-                var containedTypeMembers = containedMembers.OfType<INamedTypeSymbol>().ToArray();
-                List<INamedTypeSymbol> nonGeneratedMembers = new();
-                foreach (var namedTypeSymbol in containedTypeMembers)
-                {
-                    var refs = namedTypeSymbol.DeclaringSyntaxReferences;
-                    foreach (var refSyntax in refs)
-                    {
-                        var syntax = refSyntax.GetSyntax();
-                        var syntaxTree = syntax.SyntaxTree;
-                        var filePath = syntaxTree.FilePath;
-                        if (filePath.EndsWith(".g.cs"))
-                        {
-                            goto outer;
-                        }
-                    }
-                outer: continue;
-                }
-                var members = nonGeneratedMembers
-                    .Select(m => m.Name)
-                    .ToImmutableHashSet();
-
-                if (members.Contains(propertyName))
-                {
-                    ReportDiagnostic(context, fieldDeclaration, fieldSymbol, "Generated property name conflicts with existing member.");
-                    continue;
-                }
-
-                // Validate PropertyChangedHandlerName
-                var attributeData = fieldSymbol.GetAttributes().FirstOrDefault(ad => ad.AttributeClass?.Name == "AutoNotifyAttribute");
-                if (attributeData != null)
-                {
-                    foreach (var namedArg in attributeData.NamedArguments)
-                    {
-                        if (namedArg.Key == nameof(AutoNotifyAttribute.PropertyChangedHandlerName))
-                        {
-                            var methodName = namedArg.Value.Value as string;
-                            if (methodName == null)
-                            {
-                                ReportDiagnostic(context, fieldDeclaration, fieldSymbol, "PropertyChangedHandlerName must be a string.");
-                            }
-                            else if (!string.IsNullOrEmpty(methodName) && !IsValidEventHandler(methodName, containingType, context, fieldDeclaration, fieldSymbol))
-                            {
-                                ReportDiagnostic(context, fieldDeclaration, fieldSymbol, $"PropertyChangedHandler '{methodName}' is invalid.");
-                            }
-                        }
-                        else if (namedArg.Key == nameof(AutoNotifyAttribute.CollectionChangedHandlerName))
-                        {
-                            var methodName = namedArg.Value.Value as string;
-                            if (methodName == null)
-                            {
-                                ReportDiagnostic(context, fieldDeclaration, fieldSymbol, "CollectionChangedHandlerName must be a string.");
-                            }
-                            else if (!string.IsNullOrEmpty(methodName) && !IsValidCollectionChangedHandler(methodName, containingType, context, fieldDeclaration, fieldSymbol))
-                            {
-                                ReportDiagnostic(context, fieldDeclaration, fieldSymbol, $"CollectionChangedHandler '{methodName}' is invalid.");
-                            }
-                        }
-                    }
-                }
+                case nameof(AutoNotifyAttribute.PropertyChangedHandlerName):
+                    ValidatePropertyChangedHandler(context, fieldDeclaration, fieldSymbol, namedArg.Value.Value as string);
+                    break;
+                case nameof(AutoNotifyAttribute.CollectionChangedHandlerName):
+                    ValidateCollectionChangedHandler(context, fieldDeclaration, fieldSymbol, namedArg.Value.Value as string);
+                    break;
             }
         }
     }
 
-    private static void ReportDiagnostic(SyntaxNodeAnalysisContext context, FieldDeclarationSyntax fieldDeclaration, IFieldSymbol fieldSymbol, string message)
+    private static void ValidatePropertyChangedHandler(SyntaxNodeAnalysisContext context, FieldDeclarationSyntax fieldDeclaration, IFieldSymbol fieldSymbol, string? handlerName)
     {
-        var diagnostic = Diagnostic.Create(Rule, fieldDeclaration.GetLocation(), fieldSymbol.Name, message);
-        context.ReportDiagnostic(diagnostic);
+        if (string.IsNullOrEmpty(handlerName)) return;
+
+        if (!IsValidEventHandler(handlerName, fieldSymbol.ContainingType))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.AutoNotifyDiagnostics.InvalidPropertyChangedHandler,
+                fieldDeclaration.GetLocation(),
+                handlerName,
+                fieldSymbol.Name,
+                "Handler must be a void method taking object sender and EventArgs e parameters"));
+        }
+    }
+
+    private static void ValidateCollectionChangedHandler(SyntaxNodeAnalysisContext context, FieldDeclarationSyntax fieldDeclaration, IFieldSymbol fieldSymbol, string? handlerName)
+    {
+        if (string.IsNullOrEmpty(handlerName)) return;
+
+        if (!IsValidCollectionChangedHandler(handlerName, fieldSymbol.ContainingType))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.AutoNotifyDiagnostics.InvalidCollectionChangedHandler,
+                fieldDeclaration.GetLocation(),
+                handlerName,
+                fieldSymbol.Name,
+                "Handler must be a void method taking object sender and NotifyCollectionChangedEventArgs e parameters"));
+        }
     }
 
     private static string GetPropertyName(IFieldSymbol fieldSymbol)
     {
         var name = fieldSymbol.Name;
         if (name.StartsWith("_"))
-        {
             name = name.TrimStart('_');
-        }
         else if (name.StartsWith("s_"))
-        {
             name = name.Substring(2);
-        }
         return char.ToUpper(name[0]) + name.Substring(1);
     }
 
-    private static bool IsValidEventHandler(string methodName, INamedTypeSymbol containingType, SyntaxNodeAnalysisContext context, FieldDeclarationSyntax fieldDeclaration, IFieldSymbol fieldSymbol)
+    private static ImmutableHashSet<string> GetNonGeneratedMembers(INamedTypeSymbol type)
     {
-        var methodSymbol = containingType.GetMembers().OfType<IMethodSymbol>().FirstOrDefault(m => m.Name == methodName);
-        if (methodSymbol == null || methodSymbol.ReturnType.SpecialType != SpecialType.System_Void || methodSymbol.Parameters.Length != 2)
-        {
-            return false;
-        }
-        var firstParameter = methodSymbol.Parameters[0];
-        var secondParameter = methodSymbol.Parameters[1];
-        return firstParameter.Type.SpecialType == SpecialType.System_Object && IsOrDescendedFrom<EventArgs>(secondParameter);
+        return type.GetMembers()
+            .Where(m => !IsGeneratedMember(m))
+            .Select(m => m.Name)
+            .ToImmutableHashSet();
     }
 
-    private static bool IsValidCollectionChangedHandler(string methodName, INamedTypeSymbol containingType, SyntaxNodeAnalysisContext context, FieldDeclarationSyntax fieldDeclaration, IFieldSymbol fieldSymbol)
+    private static bool IsGeneratedMember(ISymbol member)
     {
-        var methodSymbol = containingType.GetMembers().OfType<IMethodSymbol>().FirstOrDefault(m => m.Name == methodName);
-        if (methodSymbol == null || methodSymbol.ReturnType.SpecialType != SpecialType.System_Void || methodSymbol.Parameters.Length != 2)
-        {
+        return member.DeclaringSyntaxReferences
+            .Any(r => r.SyntaxTree.FilePath.EndsWith(".Generated.cs", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsValidEventHandler(string methodName, INamedTypeSymbol containingType)
+    {
+        var methodSymbol = containingType.GetMembers()
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(m => m.Name == methodName);
+
+        return IsValidHandlerSignature<EventArgs>(methodSymbol);
+    }
+
+    private static bool IsValidCollectionChangedHandler(string methodName, INamedTypeSymbol containingType)
+    {
+        var methodSymbol = containingType.GetMembers()
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(m => m.Name == methodName);
+
+        return IsValidHandlerSignature<NotifyCollectionChangedEventArgs>(methodSymbol);
+    }
+
+    private static bool IsValidHandlerSignature<TEventArgs>(IMethodSymbol? methodSymbol) where TEventArgs : EventArgs
+    {
+        if (methodSymbol == null ||
+            methodSymbol.ReturnType.SpecialType != SpecialType.System_Void ||
+            methodSymbol.Parameters.Length != 2)
             return false;
-        }
-        var firstParameter = methodSymbol.Parameters[0];
-        var secondParameter = methodSymbol.Parameters[1];
-        return firstParameter.Type.SpecialType == SpecialType.System_Object && IsOrDescendedFrom<NotifyCollectionChangedEventArgs>(secondParameter);
+
+        var firstParam = methodSymbol.Parameters[0];
+        var secondParam = methodSymbol.Parameters[1];
+
+        return firstParam.Type.SpecialType == SpecialType.System_Object &&
+               IsOrDescendedFrom<TEventArgs>(secondParam);
     }
 
     private static bool IsOrDescendedFrom<T>(IParameterSymbol parameter)
     {
-        var eventArgsType = parameter.Type;
-        while (eventArgsType != null)
+        var currentType = parameter.Type;
+        while (currentType != null)
         {
-            if (eventArgsType.Name == typeof(T).Name)
-            {
+            if (currentType.Name == typeof(T).Name)
                 return true;
-            }
-            eventArgsType = eventArgsType.BaseType;
+            currentType = currentType.BaseType;
         }
         return false;
     }

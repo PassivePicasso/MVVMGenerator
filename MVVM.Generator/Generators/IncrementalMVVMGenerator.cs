@@ -1,15 +1,16 @@
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
-
-using MVVM.Generator.Utilities;
-
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+
+using MVVM.Generator.Interfaces;
+using MVVM.Generator.Utilities;
 
 namespace MVVM.Generator.Generators;
 
@@ -18,7 +19,6 @@ public sealed class IncrementalMVVMGenerator : IIncrementalGenerator
 {
     private readonly CodeRenderer _codeRenderer = new CodeRenderer();
     private readonly ErrorReporter _errorReporter = new ErrorReporter();
-
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var classDeclarations = context.SyntaxProvider

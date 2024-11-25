@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.Specialized;
 using System.Linq;
 
@@ -13,7 +14,7 @@ namespace MVVM.Generator.Utilities;
 public class PropertyGenerator
 {
     private const string INCCName = nameof(INotifyCollectionChanged);
-    public void AddProperties(List<string> properties, IFieldSymbol fieldSymbol, Dictionary<string, List<string>> dependsOnLookup)
+    public void AddProperties(List<string> properties, IFieldSymbol fieldSymbol, ImmutableDictionary<string, ImmutableHashSet<string>> reverseDependsOnLookup)
     {
         var fieldName = fieldSymbol.Name;
         var propertyName = GetPropertyName(fieldSymbol);
@@ -109,16 +110,12 @@ public class PropertyGenerator
             }
         }
 
-        // Handle DependsOnAttribute - Look up by field name without the underscore
+        // Handle DependsOnAttribute - Look up by property name
         var dependsSuffix = string.Empty;
-        var lookupName = fieldName.TrimStart('_').TrimStart('s');
-        if (dependsOnLookup.TryGetValue(lookupName, out var dependsProperties))
+        if (reverseDependsOnLookup.TryGetValue(propertyName, out var dependentProperties))
         {
-            foreach (var p in dependsProperties)
-                dependsSuffix += $"""
-
-                OnPropertyChanged(nameof({p}));
-""";
+            dependsSuffix = dependentProperties.Aggregate(string.Empty, (current, p) => 
+                current + $"\n                OnPropertyChanged(nameof({p}));");
         }
 
         // Generate the property code

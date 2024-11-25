@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.Specialized;
 using System.Linq;
-
 using Microsoft.CodeAnalysis;
-
 using MVVM.Generator.Attributes;
+using MVVM.Generator.Interfaces;
 using MVVM.Generator.Utilities;
 
 namespace MVVM.Generator.Generators;
@@ -17,8 +17,23 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
     private const string AttrTypeName = nameof(AutoNotifyAttribute);
     private const string INCCName = nameof(INotifyCollectionChanged);
 
-    private readonly AttributeProcessor _attributeProcessor = new AttributeProcessor();
-    private readonly PropertyGenerator _propertyGenerator = new PropertyGenerator();
+    private readonly IDependencyAnalyzer _dependencyAnalyzer;
+    private readonly PropertyGenerator _propertyGenerator;
+    private readonly DiagnosticDescriptor _circularDependencyDescriptor;
+
+    public AutoNotifyGenerator()
+    {
+        _dependencyAnalyzer = new AttributeProcessor();
+        _propertyGenerator = new PropertyGenerator();
+
+        _circularDependencyDescriptor = new DiagnosticDescriptor(
+            id: "MVVM001",
+            title: "Circular property dependency detected",
+            messageFormat: "Property '{0}' has a circular dependency chain",
+            category: "MVVM",
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+    }
 
     protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)
     {
@@ -56,8 +71,18 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
     protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol)
     {
-        var dependsOnLookup = _attributeProcessor.BuildDependsOnLookup(fieldSymbol.ContainingType);
-        _propertyGenerator.AddProperties(properties, fieldSymbol, dependsOnLookup);
+        var dependencies = _dependencyAnalyzer.AnalyzeDependencies(fieldSymbol.ContainingType);
+
+        if (HasCircularDependencies(dependencies))
+        {
+            // context.ReportDiagnostic(Diagnostic.Create(
+            //     _circularDependencyDescriptor,
+            //     fieldSymbol.Locations.FirstOrDefault(),
+            //     fieldSymbol.Name));
+            return;
+        }
+
+        _propertyGenerator.AddProperties(properties, fieldSymbol, dependencies);
     }
 
     protected override void AddInterfaces(List<string> interfaces, IFieldSymbol fieldSymbol)
@@ -78,5 +103,36 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         }
 """);
         }
+    }
+
+    private bool HasCircularDependencies(ImmutableDictionary<string, ImmutableHashSet<string>> dependencies)
+    {
+        var visited = new HashSet<string>();
+        var stack = new HashSet<string>();
+
+        bool HasCycle(string property)
+        {
+            if (stack.Contains(property))
+                return true;
+            if (visited.Contains(property))
+                return false;
+
+            visited.Add(property);
+            stack.Add(property);
+
+            if (dependencies.TryGetValue(property, out var deps))
+            {
+                foreach (var dep in deps)
+                {
+                    if (HasCycle(dep))
+                        return true;
+                }
+            }
+
+            stack.Remove(property);
+            return false;
+        }
+
+        return dependencies.Keys.Any(HasCycle);
     }
 }

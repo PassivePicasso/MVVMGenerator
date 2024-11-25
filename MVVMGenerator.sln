@@ -12,6 +12,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Extras", "Extras", "{36A797A0-1D1F-47E8-B577-7534A84A4381}"
 	ProjectSection(SolutionItems) = preProject
 		.github\copilot-instructions.md = .github\copilot-instructions.md
+		UpgradeChecklist.md = UpgradeChecklist.md
 	EndProjectSection
 EndProject
 Global

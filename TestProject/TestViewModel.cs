@@ -30,7 +30,7 @@ namespace TestProject
         private bool isOpen;
         private void IsOpenedChanged(object? sender, EventArgs args) { }
 
-        [DependsOn(nameof(IsOpen))]
+        [DependsOn(nameof(IsOpen), nameof(Visibility))]
         public bool Ready => IsOpen;
 
 
