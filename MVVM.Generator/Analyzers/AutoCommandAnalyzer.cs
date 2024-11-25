@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 using MVVM.Generator.Attributes;
+using MVVM.Generator.Generators;
 
 namespace MVVM.Generator.Analyzers;
 
@@ -31,7 +32,7 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeNode(SyntaxNodeAnalysisContext context)
     {
-        if (context.Node.SyntaxTree.FilePath.EndsWith(".Generated.cs"))
+        if (context.Node.SyntaxTree.FilePath.EndsWith(ViewModelGenerator.Suffix))
             return;
 
         var methodDeclaration = (MethodDeclarationSyntax)context.Node;
@@ -90,7 +91,7 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
             var canExecuteMethodName = attributeData.ConstructorArguments[0].Value as string;
             if (!string.IsNullOrEmpty(canExecuteMethodName))
             {
-                ValidateCanExecuteMethodSignature(context, methodDeclaration, methodSymbol, canExecuteMethodName);
+                ValidateCanExecuteMethodSignature(context, methodDeclaration, methodSymbol, canExecuteMethodName!);
             }
         }
     }
@@ -122,7 +123,7 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
 
         for (int i = 0; i < canExecuteMethod.Parameters.Length; i++)
         {
-            if (!canExecuteMethod.Parameters[i].Type.Equals(methodSymbol.Parameters[i].Type))
+            if (!SymbolEqualityComparer.Default.Equals(canExecuteMethod.Parameters[i].Type, methodSymbol.Parameters[i].Type))
             {
                 ReportCanExecuteError(context, methodDeclaration, methodSymbol, canExecuteMethodName, $"Parameter {i + 1} type mismatch");
                 return;
@@ -146,7 +147,7 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
         var existingMembers = methodSymbol.ContainingType.GetMembers()
             .Where(m =>
                 !IsGeneratedMember(m) && // Not from generated code
-                m.Locations.Any(l => !l.SourceTree?.FilePath.EndsWith(".Generated.cs") ?? false) && // Only check source code
+                m.Locations.Any(l => !l.SourceTree?.FilePath.EndsWith(ViewModelGenerator.Suffix) ?? false) && // Only check source code
                 !m.GetAttributes().Any(a => a.AttributeClass?.Name == "AutoCommandAttribute") // Not from AutoCommand
             )
             .Select(m => m.Name)
@@ -165,6 +166,6 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
     private static bool IsGeneratedMember(ISymbol member)
     {
         return member.DeclaringSyntaxReferences
-            .Any(r => r.SyntaxTree.FilePath.EndsWith(".Generated.cs"));
+            .Any(r => r.SyntaxTree.FilePath.EndsWith(ViewModelGenerator.Suffix));
     }
 }

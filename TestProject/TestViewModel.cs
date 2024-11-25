@@ -26,11 +26,11 @@ namespace TestProject
 
         [AutoNotify] private byte[]? data;
 
-        [AutoNotify(PropertyChangedHandlerName = nameof(IsOpenedChanged))]
+        [JsonIgnore, AutoNotify(PropertyChangedHandlerName = nameof(IsOpenedChanged))]
         private bool isOpen;
         private void IsOpenedChanged(object? sender, EventArgs args) { }
 
-        [DependsOn(nameof(IsOpen), nameof(Visibility))]
+        [DependsOn(nameof(Visibility))]
         public bool Ready => IsOpen;
 
 

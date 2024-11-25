@@ -9,7 +9,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 using MVVM.Generator.Attributes;
-using MVVM.Generator.Interfaces;
+using MVVM.Generator.Generators;
 
 namespace MVVM.Generator.Analyzers;
 
@@ -40,7 +40,7 @@ public class AutoNotifyAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeNode(SyntaxNodeAnalysisContext context)
     {
         // Skip generated files
-        if (context.Node.SyntaxTree.FilePath.EndsWith(".Generated.cs", StringComparison.OrdinalIgnoreCase))
+        if (context.Node.SyntaxTree.FilePath.EndsWith(ViewModelGenerator.Suffix, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -165,7 +165,7 @@ public class AutoNotifyAnalyzer : DiagnosticAnalyzer
     private static bool IsGeneratedMember(ISymbol member)
     {
         return member.DeclaringSyntaxReferences
-            .Any(r => r.SyntaxTree.FilePath.EndsWith(".Generated.cs", StringComparison.OrdinalIgnoreCase));
+            .Any(r => r.SyntaxTree.FilePath.EndsWith(ViewModelGenerator.Suffix, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsValidEventHandler(string methodName, INamedTypeSymbol containingType)

@@ -5,6 +5,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using MVVM.Generator.Attributes;
+using MVVM.Generator.Diagnostics;
 using MVVM.Generator.Interfaces;
 using MVVM.Generator.Utilities;
 
@@ -19,20 +20,11 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
     private readonly IDependencyAnalyzer _dependencyAnalyzer;
     private readonly PropertyGenerator _propertyGenerator;
-    private readonly DiagnosticDescriptor _circularDependencyDescriptor;
 
     public AutoNotifyGenerator()
     {
         _dependencyAnalyzer = new AttributeProcessor();
         _propertyGenerator = new PropertyGenerator();
-
-        _circularDependencyDescriptor = new DiagnosticDescriptor(
-            id: "MVVM001",
-            title: "Circular property dependency detected",
-            messageFormat: "Property '{0}' has a circular dependency chain",
-            category: "MVVM",
-            defaultSeverity: DiagnosticSeverity.Error,
-            isEnabledByDefault: true);
     }
 
     protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)
@@ -72,13 +64,15 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
     protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol)
     {
         var dependencies = _dependencyAnalyzer.AnalyzeDependencies(fieldSymbol.ContainingType);
+        if (!ValidateSymbol(fieldSymbol))
+            return;
 
         if (HasCircularDependencies(dependencies))
         {
-            // context.ReportDiagnostic(Diagnostic.Create(
-            //     _circularDependencyDescriptor,
-            //     fieldSymbol.Locations.FirstOrDefault(),
-            //     fieldSymbol.Name));
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoNotify.CircularDependency,
+                fieldSymbol.Locations.FirstOrDefault(),
+                fieldSymbol.Name));
             return;
         }
 
@@ -135,5 +129,65 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         }
 
         return dependencies.Keys.Any(HasCycle);
+    }
+    protected bool ValidateSymbol(IFieldSymbol fieldSymbol)
+    {
+        // Check if type is valid for property generation
+        if (fieldSymbol.Type.IsStatic || fieldSymbol.Type.IsAbstract)
+        {
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoNotify.InvalidPropertyType,
+                fieldSymbol.Locations.FirstOrDefault(),
+                fieldSymbol.Name,
+                fieldSymbol.Type.Name));
+            return false;
+        }
+
+        // Analyze dependencies before generation
+        var dependencies = _dependencyAnalyzer.AnalyzeDependencies(fieldSymbol.ContainingType);
+
+        // Check for missing dependencies
+        foreach (var dep in dependencies.GetValueOrDefault(fieldSymbol.Name, ImmutableHashSet<string>.Empty))
+        {
+            if (!dependencies.ContainsKey(dep))
+            {
+                Context.ReportDiagnostic(Diagnostic.Create(
+                    Descriptors.Generator.AutoNotify.DependencyNotFound,
+                    fieldSymbol.Locations.FirstOrDefault(),
+                    fieldSymbol.Name,
+                    dep));
+                return false;
+            }
+        }
+
+        // Check for circular dependencies
+        if (HasCircularDependencies(dependencies))
+        {
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoNotify.CircularDependency,
+                fieldSymbol.Locations.FirstOrDefault(),
+                fieldSymbol.Name));
+            return false;
+        }
+
+        return true;
+    }
+
+    private void AddFallbackProperty(List<string> properties, IFieldSymbol fieldSymbol)
+    {
+        // Basic property generation without dependencies
+        properties.Add($@"
+        public {fieldSymbol.Type} {fieldSymbol.Name}
+        {{
+            get => _{fieldSymbol.Name};
+            set 
+            {{
+                if (!EqualityComparer<{fieldSymbol.Type}>.Default.Equals(_{fieldSymbol.Name}, value))
+                {{
+                    _{fieldSymbol.Name} = value;
+                    OnPropertyChanged(nameof({fieldSymbol.Name}));
+                }}
+            }}
+        }}");
     }
 }

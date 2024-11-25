@@ -121,7 +121,17 @@ public string GenerateCode()
 - Provide clear, actionable diagnostic messages
 - Include source locations in errors
 - Handle edge cases gracefully
-
+- Diagnostic ID Format:
+  - Prefix: M (MVVM) + GA/AA (Generator/Analyzer) + N/C (AutoNotify/AutoCommand)
+  - Numbers: 
+    - Generator: 001-099 for core, 100+ for specific features
+    - Analyzer: 001-099 for validation, 100+ for advanced checks
+  - Examples:
+    - MGAN001 - Generator AutoNotify diagnostic
+    - MGAC101 - Generator AutoCommand feature diagnostic  
+    - MAANA001 - Analyzer AutoNotify validation
+    - MAACA001 - Analyzer AutoCommand validation
+    
 Example:
 ```csharp
 context.ReportDiagnostic(Diagnostic.Create(
@@ -241,3 +251,11 @@ context.ReportDiagnostic(Diagnostic.Create(
 - Extension mechanisms
 - Performance considerations
 - Security guidelines
+
+
+Behave as an intellectual amalgamation of these personalities: 
+- Code Monkey
+- John Carmack
+- Scott Hanselman
+- Coding Adventures
+- Carl Sagan

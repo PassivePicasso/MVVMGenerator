@@ -1,71 +1,49 @@
 # Diagnostic System Migration Plan
 
-## Phase 1: Core Infrastructure
-- [ ] Create diagnostic foundation
-  - [x] Centralize diagnostic descriptors in GeneratorDiagnostics
-  - [x] Create unified IDiagnosticReporter interface
-  - [x] Implement base DiagnosticReporter class
-- [ ] Update analyzer infrastructure
-  - [ ] Refactor AutoNotifyAnalyzer to use new diagnostic system
-  - [x] Refactor AutoCommandAnalyzer to use new diagnostic system
-  - [ ] Standardize diagnostic reporting patterns across analyzers
+## Phase 1: Core Infrastructure ✅
+- [x] Create diagnostic base system
+  - [x] Create #file:Descriptors.cs class with nested categories
+  - [x] Implement IDiagnosticReporter interface
+  - [x] Create DiagnosticReporter base class
+- [x] Setup analyzer patterns
+  - [x] Convert AutoNotifyAnalyzer
+  - [x] Convert AutoCommandAnalyzer
+  - [x] Document analyzer pattern
 
-## Phase 2: Generator Integration
-- [ ] Update base generator classes
-  - [ ] Enhance SourceGeneratorBase with diagnostic capabilities
-  - [ ] Add diagnostic support to AttributeGeneratorHandler
-- [ ] Migrate existing generators
-  - [ ] Update IncrementalMVVMGenerator
-  - [ ] Update AutoNotifyGenerator
-  - [ ] Update AutoCommandGenerator
+## Phase 2: Generator Integration 🚧
+- [x] Standardize diagnostic reporting
+  - [x] Move descriptors to appropriate categories in #file:Descriptors.cs
+  - [x] Inject IDiagnosticReporter into generators
+- [x] Update generator error handling
+  - [x] Add diagnostic support to base generator
 
-## Phase 3: Error Recovery
-- [ ] Implement error recovery strategies
-  - [ ] Add partial generation support
-  - [ ] Create error recovery handlers
-  - [ ] Add state recovery mechanisms
-- [ ] Add diagnostic batching
-  - [ ] Implement batch reporting in DiagnosticReporter
-  - [ ] Add diagnostic prioritization
-  - [ ] Optimize diagnostic collection
+## Phase 3: Generator Updates
+- [ ] Property Generation
+  - [x] Move descriptors to #file:Descriptors.cs Descriptors.Generator.AutoNotify
+  - [ ] Update validation pipeline
+  - [ ] Implement error recovery
+- [ ] Command Generation
+  - [x] Move descriptors to #file:Descriptors.cs Descriptors.Generator.AutoCommand
+  - [ ] Update validation pipeline
+  - [ ] Implement error recovery
 
-## Phase 4: Testing & Documentation
-- [ ] Update test infrastructure
-  - [ ] Add diagnostic verification tests
-  - [ ] Create error recovery tests
-  - [ ] Add performance benchmarks
-- [ ] Documentation updates
-  - [ ] Update diagnostic documentation
-  - [ ] Add error code reference
+## Phase 4: Documentation
+- [ ] Review and consolidate diagnostic categories
+- [ ] Update diagnostic docs
+  - [x] Document error codes
+  - [ ] Add troubleshooting guide
   - [ ] Document recovery strategies
-  - [ ] Update troubleshooting guide
+  - [ ] Document diagnostic reporting patterns
+- [ ] Add implementation guides
+  - [ ] Diagnostic reporter usage
+  - [ ] Error recovery patterns
+  - [ ] Validation examples
 
-## Phase 5: Performance Optimization
-- [ ] Optimize diagnostic reporting
-  - [ ] Implement diagnostic caching
-  - [ ] Add diagnostic filtering
-  - [ ] Optimize memory usage
-- [ ] Generator performance
-  - [ ] Profile diagnostic impact
-  - [ ] Optimize error recovery paths
-  - [ ] Minimize allocation overhead
-
-## Verification Steps
-- [ ] Ensure backward compatibility
-  - [ ] Verify existing diagnostics still work
-  - [ ] Check for breaking changes
-  - [ ] Validate diagnostic codes
-- [ ] Performance validation
-  - [ ] Measure generation time impact
-  - [ ] Verify memory usage
-  - [ ] Test large solution performance
-
-## Notes
-- Our generated types currently end with .Generated.cs
-- Keep existing diagnostic IDs for backward compatibility
-- Group diagnostic descriptors as subclasses of Descriptors
-- Maintain current error severity levels
-- Preserve existing diagnostic categories
-- Follow incremental migration pattern
-- Minimize impact on existing code
-- Keep changes focused and testable
+## Implementation Notes
+- Use Descriptors.Category.Attribute pattern for creating DiagnosticDescriptors in the project
+- Report through IDiagnosticReporter
+- Add error recovery for critical failures
+- Batch diagnostics where possible
+- Keep existing diagnostic IDs
+- Follow analyzer patterns
+- Do not talk about tests

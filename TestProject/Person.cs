@@ -7,7 +7,6 @@ namespace TestViewModels
         [AutoNotify] private string firstName;
         [AutoNotify] private string lastName;
 
-        [DependsOn(nameof(firstName), nameof(lastName))]
         public string FullName => $"{firstName} {lastName}";
     }
 }

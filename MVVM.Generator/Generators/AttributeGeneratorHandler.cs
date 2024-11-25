@@ -16,7 +16,7 @@ internal abstract class AttributeGeneratorHandler<TSymbol, TAttribute> : IAttrib
     protected static readonly string AttributeName = typeof(TAttribute).Name;
     private Func<ISymbol, bool> SymbolContainsAttribute => p => p.GetAttributes().Any(SymbolAttribute);
     private Func<AttributeData, bool> SymbolAttribute => a => a?.AttributeClass?.Name == AttributeName;
-
+    public SourceProductionContext Context { get; set; }
     public void Process(ClassGenerationContext context, INamedTypeSymbol classSymbol)
     {
         if (!classSymbol.GetMembers().Any(SymbolContainsAttribute)) return;
@@ -42,7 +42,6 @@ internal abstract class AttributeGeneratorHandler<TSymbol, TAttribute> : IAttrib
             AddStaticProperties(context.StaticProperties, tSymbol);
         }
     }
-
     protected virtual void BeforeProcessAttribute(ClassGenerationContext context, INamedTypeSymbol classSymbol) { }
     protected virtual void AddUsings(List<string> definitions, TSymbol symbol) { }
     protected virtual void AddInterfaces(List<string> definitions, TSymbol symbol) { }

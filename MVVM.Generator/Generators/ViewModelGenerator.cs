@@ -15,8 +15,9 @@ using MVVM.Generator.Utilities;
 namespace MVVM.Generator.Generators;
 
 [Generator]
-public sealed class IncrementalMVVMGenerator : IIncrementalGenerator
+public sealed class ViewModelGenerator : IIncrementalGenerator
 {
+    public const string Suffix = ".ViewModel.cs";
     private readonly CodeRenderer _codeRenderer = new CodeRenderer();
     private readonly ErrorReporter _errorReporter = new ErrorReporter();
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -47,7 +48,7 @@ public sealed class IncrementalMVVMGenerator : IIncrementalGenerator
             if (generatedCode == null) continue;
 
             var sourceText = SourceText.From(generatedCode, Encoding.UTF8);
-            var fileName = $"{classSymbols.First().Name}.Generated.cs";
+            var fileName = $"{classSymbols.First().Name}{Suffix}";
             context.AddSource(fileName, sourceText);
         }
     }
@@ -94,6 +95,7 @@ public sealed class IncrementalMVVMGenerator : IIncrementalGenerator
 
             foreach (var generator in generators)
             {
+                generator.Context = context;
                 generator.Process(generationContext, classSymbol);
             }
 
@@ -150,9 +152,11 @@ public sealed class IncrementalMVVMGenerator : IIncrementalGenerator
             .Where(t => typeof(IAttributeGenerator).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
             .ToArray();
 
-        return generatorTypes
-            .Select(Activator.CreateInstance)
-            .OfType<IAttributeGenerator>()
-            .ToArray();
+        IAttributeGenerator[] attributeGenerators = generatorTypes
+                    .Select(Activator.CreateInstance)
+                    .OfType<IAttributeGenerator>()
+                    .ToArray();
+
+        return attributeGenerators;
     }
 }

@@ -89,7 +89,9 @@ public class PropertyGenerator
                             ValidateCollectionChangedHandler(methodName, containingType, matchedMethodSymbol);
 
                             string handlerFieldName = $"_{fieldName}CollectionChangedHandler";
-                            defines = $"private NotifyCollectionChangedEventHandler {handlerFieldName};";
+                            defines = $"""
+                                    private NotifyCollectionChangedEventHandler {handlerFieldName};
+                            """;
                             prefix = $$"""
 
                 if ({{fieldName}} != null && {{handlerFieldName}} != null)
@@ -119,8 +121,9 @@ public class PropertyGenerator
         }
 
         // Generate the property code
-        properties.Add($$"""
-        {{defines}}{{propertyAttributesString}}
+        string item = $$"""
+
+{{propertyAttributesString}}
         public {{staticString}}{{virtualPrefix}}{{type}} {{propertyName}}
         {
             {{getVisibility}}get => {{fieldName}};
@@ -130,10 +133,15 @@ public class PropertyGenerator
                 OnPropertyChanged();{{dependsSuffix}}
             }
         }
-""");
+""";
+        if (!string.IsNullOrWhiteSpace(defines))
+            item = $"""
+{defines}{item}
+""";
+            properties.Add(item);
     }
 
-    private static string GetPropertyName(IFieldSymbol fieldSymbol)
+    public static string GetPropertyName(IFieldSymbol fieldSymbol)
     {
         var name = fieldSymbol.Name;
         if (name.StartsWith("_"))

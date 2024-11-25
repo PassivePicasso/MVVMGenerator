@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 
 using MVVM.Generator.Attributes;
+using MVVM.Generator.Diagnostics;
 using MVVM.Generator.Utilities;
 
 namespace MVVM.Generator.Generators;
@@ -58,7 +59,11 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
 
                 if (canExecuteMethod == null)
                 {
-                    throw new InvalidOperationException($"Method '{canExecuteMethodName}' not found on type '{containingType.Name}'.");
+                    Context.ReportDiagnostic(Diagnostic.Create(
+                        Descriptors.Generator.AutoCommand.MissingCanExecute,
+                        methodSymbol.Locations.FirstOrDefault(),
+                        canExecuteMethodName,
+                        methodSymbol.Name));
                 }
 
                 // Verify the number of parameters

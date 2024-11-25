@@ -5,6 +5,8 @@ using System.Collections.Immutable;
 using MVVM.Generator.Attributes;
 using System.Linq;
 using MVVM.Generator.Interfaces;
+using System.Collections.Generic;
+using System;
 
 namespace MVVM.Generator.Utilities;
 
@@ -40,40 +42,6 @@ public class AttributeProcessor : IDependencyAnalyzer
 
             return builder.ToImmutable();
         });
-    }
-
-    private ImmutableDictionary<string, ImmutableHashSet<string>> BuildManualDependencies(INamedTypeSymbol typeSymbol)
-    {
-        var builder = ImmutableDictionary.CreateBuilder<string, ImmutableHashSet<string>>();
-
-        foreach (var member in typeSymbol.GetMembers())
-        {
-            var dependsOnAttribute = member.GetAttributes()
-                .FirstOrDefault(a => a.AttributeClass?.Name == DependsOnAttributeName);
-
-            if (dependsOnAttribute == null) continue;
-
-            var propertyNames = dependsOnAttribute.ConstructorArguments
-                .FirstOrDefault()
-                .Values
-                .Select(v => v.Value?.ToString())
-                .Where(v => v != null)
-                .ToImmutableHashSet()!;
-
-            foreach (var propertyName in propertyNames)
-            {
-                if (!builder.ContainsKey(propertyName))
-                {
-                    builder[propertyName] = ImmutableHashSet.Create(member.Name);
-                }
-                else
-                {
-                    builder[propertyName] = builder[propertyName].Add(member.Name);
-                }
-            }
-        }
-
-        return builder.ToImmutable();
     }
 
     private ImmutableDictionary<string, ImmutableHashSet<string>> BuildAutoDependencies(INamedTypeSymbol typeSymbol)
@@ -120,6 +88,71 @@ public class AttributeProcessor : IDependencyAnalyzer
         }
 
         return builder.ToImmutable();
+    }
+
+    private ImmutableDictionary<string, ImmutableHashSet<string>> BuildManualDependencies(INamedTypeSymbol typeSymbol)
+    {
+        var builder = ImmutableDictionary.CreateBuilder<string, ImmutableHashSet<string>>();
+        var fieldToPropertyMap = BuildFieldToPropertyMap(typeSymbol);
+
+        foreach (var member in typeSymbol.GetMembers())
+        {
+            var dependsOnAttribute = member.GetAttributes()
+                .FirstOrDefault(a => a.AttributeClass?.Name == DependsOnAttributeName);
+
+            if (dependsOnAttribute == null) continue;
+
+            var dependencyNames = dependsOnAttribute.ConstructorArguments
+                .FirstOrDefault()
+                .Values
+                .Select(v => v.Value?.ToString())
+                .Where(v => v != null)
+                .ToList()!;
+
+            foreach (var propertyName in dependencyNames)
+            {
+                var resolvedNames = ResolvePropertyName(propertyName!, fieldToPropertyMap);
+                foreach (var resolvedName in resolvedNames)
+                {
+                    if (!builder.ContainsKey(resolvedName))
+                    {
+                        builder[resolvedName] = [member.Name];
+                    }
+                    else
+                    {
+                        builder[resolvedName] = builder[resolvedName].Add(member.Name);
+                    }
+                }
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private Dictionary<string, string> BuildFieldToPropertyMap(INamedTypeSymbol typeSymbol)
+    {
+        var map = new Dictionary<string, string>();
+        foreach (var member in typeSymbol.GetMembers())
+        {
+            if (member is IFieldSymbol field &&
+                field.GetAttributes().Any(a => a.AttributeClass?.Name == AutoNotifyAttributeName))
+            {
+                var propertyName = PropertyGenerator.GetPropertyName(field);
+
+                map[field.Name] = propertyName;
+                map[propertyName] = propertyName; // Allow direct property name reference
+            }
+        }
+        return map;
+    }
+
+    private IEnumerable<string> ResolvePropertyName(string name, Dictionary<string, string> fieldToPropertyMap)
+    {
+        if (fieldToPropertyMap.TryGetValue(name, out var propertyName))
+        {
+            return [propertyName];
+        }
+        return [name];
     }
 
     private static string GetAutoNotifyPropertyName(IFieldSymbol fieldSymbol)
