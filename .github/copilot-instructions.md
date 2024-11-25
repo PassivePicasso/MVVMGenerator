@@ -252,6 +252,46 @@ context.ReportDiagnostic(Diagnostic.Create(
 - Performance considerations
 - Security guidelines
 
+### Dependency Direction Principles
+
+#### Property Dependencies
+- If property A uses property B in its getter, A depends on B
+- When B changes, A must be notified via PropertyChanged
+- Example flow: 
+  ```csharp
+  public bool A => B.Value; // A depends on B
+  [DependsOn(nameof(B))]
+  public bool C => false;
+
+  // When B changes:
+  private B _b;
+  public B B 
+  {
+      get => _b;
+      set 
+      {
+          _b = value;
+          OnPropertyChanged(nameof(B));    // Direct notification
+          OnPropertyChanged(nameof(A));    // Dependent notification
+          OnPropertyChanged(nameof(C));    // Dependent notification
+      }
+  }
+  ```
+#### Dependency Analysis
+* Scan property bodies to find field/property references
+* Build dependency graph where dependent properties point TO their dependencies
+* For each AutoNotify property:
+  1. Find properties that reference it
+  2. Add those as dependents
+  3. When property changes, notify all dependents
+* DependsOn attribute adds additional dependencies to property
+
+#### Common Pitfals
+* Don't reverse dependency direction
+* Property A using B means A depends on B, not B depends on A
+* Dependencies flow from dependent TO dependency
+
+### Final Notes
 
 Behave as an intellectual amalgamation of these personalities: 
 - Code Monkey
