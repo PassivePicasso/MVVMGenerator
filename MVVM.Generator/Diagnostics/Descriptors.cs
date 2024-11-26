@@ -13,15 +13,15 @@ public static class Descriptors
             public static readonly DiagnosticDescriptor CircularDependency = new(
                 id: "MGAN001",
                 title: "Circular property dependency detected",
-                messageFormat: "Property '{0}' has a circular dependency chain",
+                messageFormat: "Property '{0}' has a circular dependency chain: {1}",
                 category: Category,
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
 
-            public static readonly DiagnosticDescriptor InvalidPropertyType = new(
+            public static readonly DiagnosticDescriptor StaticType = new(
                 id: "MGAN002",
-                title: "Invalid property type",
-                messageFormat: "Cannot generate property for field '{0}' of type '{1}'",
+                title: "Static type not supported",
+                messageFormat: "Cannot generate property for field '{0}' because type '{1}' is static",
                 category: Category,
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
@@ -29,12 +29,11 @@ public static class Descriptors
             public static readonly DiagnosticDescriptor DependencyNotFound = new(
                 id: "MGAN003",
                 title: "Property dependency not found",
-                messageFormat: "Property '{0}' depends on non-existent property '{1}'",
+                messageFormat: "Property '{0}' depends on property '{1}' which does not exist or is not an AutoNotify property",
                 category: Category,
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
         }
-
         public static class AutoCommand
         {
             private const string Category = "Generator";
@@ -48,28 +47,29 @@ public static class Descriptors
                 isEnabledByDefault: true);
 
             public static readonly DiagnosticDescriptor InvalidMethodSignature = new(
-                id: "MGAC101",
+                id: "MGAC002",
                 title: "Invalid command method signature",
-                messageFormat: "Method '{0}' has invalid signature for command: {1}",
-                category: Category,
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true);
-
-            public static readonly DiagnosticDescriptor MissingCanExecute = new(
-                id: "MGAC102",
-                title: "Missing CanExecute method",
-                messageFormat: "CanExecute method '{0}' not found for command '{1}'",
+                messageFormat: "Method '{0}' has invalid signature. Commands must return void/Task and take 0-1 parameters. Found: {1}.",
                 category: Category,
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
 
             public static readonly DiagnosticDescriptor InvalidCanExecuteSignature = new(
-                id: "MGAC103",
+                id: "MGAC003",
                 title: "Invalid CanExecute signature",
-                messageFormat: "CanExecute method '{0}' has invalid signature: {1}",
+                messageFormat: "CanExecute method '{0}' must return bool and have matching parameters with command method. Found: {1}.",
                 category: Category,
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
+
+            // Optional CanExecute warning
+            public static readonly DiagnosticDescriptor MissingCanExecute = new(
+                id: "MGAC101", // Moved to 100+ series as it's not an error
+                title: "Consider adding CanExecute method",
+                messageFormat: "Command '{0}' has no CanExecute method defined. Consider adding method '{1}' for command validation.",
+                category: Category,
+                defaultSeverity: DiagnosticSeverity.Info,
+                isEnabledByDefault: false);
         }
     }
     public static class Analzyer

@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 
 using Microsoft.CodeAnalysis;
@@ -12,7 +11,50 @@ namespace MVVM.Generator.Generators;
 
 internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, AutoCommandAttribute>
 {
-    private readonly CommandClassGenerator _commandClassGenerator = new CommandClassGenerator();
+    private readonly CommandClassGenerator _commandClassGenerator = new();
+
+    public override bool ValidateSymbol<T>(T symbol)
+    {
+        var methodSymbol = symbol as IMethodSymbol;
+        if (methodSymbol == null)
+            return false;
+        if (methodSymbol.DeclaredAccessibility != Accessibility.Public)
+        {
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoCommand.NotPublic,
+                methodSymbol.Locations.FirstOrDefault(),
+                methodSymbol.Name));
+            return false;
+        }
+
+        if (methodSymbol.Parameters.Length > 1)
+        {
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoCommand.InvalidMethodSignature,
+                methodSymbol.Locations.FirstOrDefault(),
+                methodSymbol.Name,
+                $"Method has {methodSymbol.Parameters.Length} parameters, maximum allowed is 1."));
+            return false;
+        }
+
+        if (!IsValidReturnType(methodSymbol.ReturnType))
+        {
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoCommand.InvalidMethodSignature,
+                methodSymbol.Locations.FirstOrDefault(),
+                methodSymbol.Name,
+                $"Return type must be void or Task, found {methodSymbol.ReturnType}."));
+            return false;
+        }
+
+        var canExecuteMethod = GetCanExecuteMethod(methodSymbol);
+        if (canExecuteMethod != null && !ValidateCanExecuteMethod(methodSymbol, canExecuteMethod))
+        {
+            return false;
+        }
+
+        return true;
+    }
 
     protected override void AddUsings(List<string> usings, IMethodSymbol symbol)
     {
@@ -21,87 +63,21 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
         {
             NamespaceExtractor.AddNamespaceUsings(usings, symbol.Parameters[0].Type);
         }
+        if (IsAsyncCommand(symbol))
+        {
+            usings.Add("using System.Threading.Tasks;");
+        }
     }
-
-    string GetCommandClassName(IMethodSymbol symbol) => $$"""{{symbol.Name}}CommandClass""";
 
     protected override void AddNestedClasses(List<string> definitions, IMethodSymbol symbol)
     {
         if (IsOverrideWithAutoCommand(symbol)) return;
-        if (symbol.DeclaredAccessibility != Accessibility.Public) return;
-        if (symbol.Parameters.Length > 1) return;
 
         var className = GetCommandClassName(symbol);
         var canExecuteMethodName = GetCanExecuteMethodName(symbol);
 
         _commandClassGenerator.AddCommandClass(definitions, symbol, className, canExecuteMethodName);
     }
-
-    public string GetCanExecuteMethodName(IMethodSymbol methodSymbol)
-    {
-        var attributeData = methodSymbol.GetAttributes()
-            .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoCommandAttribute));
-
-        if (attributeData == null)
-        {
-            return string.Empty;
-        }
-
-        if (attributeData.ConstructorArguments.Length > 0)
-        {
-            var canExecuteMethodNode = attributeData.ConstructorArguments[0];
-            if (canExecuteMethodNode.Value is string canExecuteMethodName)
-            {
-                var containingType = methodSymbol.ContainingType;
-                var canExecuteMethod = containingType.GetMembers()
-                    .OfType<IMethodSymbol>()
-                    .FirstOrDefault(m => m.Name == canExecuteMethodName);
-
-                if (canExecuteMethod == null)
-                {
-                    Context.ReportDiagnostic(Diagnostic.Create(
-                        Descriptors.Generator.AutoCommand.MissingCanExecute,
-                        methodSymbol.Locations.FirstOrDefault(),
-                        canExecuteMethodName,
-                        methodSymbol.Name));
-                }
-
-                // Verify the number of parameters
-                if (canExecuteMethod.Parameters.Length != methodSymbol.Parameters.Length)
-                {
-                    throw new InvalidOperationException($"Method '{canExecuteMethodName}' has a different number of parameters than '{methodSymbol.Name}'.");
-                }
-
-                // Ensure the return type is bool
-                if (canExecuteMethod.ReturnType.SpecialType != SpecialType.System_Boolean)
-                {
-                    throw new InvalidOperationException($"Method '{canExecuteMethodName}' does not return a boolean.");
-                }
-
-                return canExecuteMethodName;
-            }
-        }
-
-        return string.Empty;
-    }
-
-    private bool IsOverrideWithAutoCommand(IMethodSymbol methodSymbol)
-    {
-        if (!methodSymbol.IsOverride)
-        {
-            return false;
-        }
-
-        var overriddenMethod = methodSymbol.OverriddenMethod;
-        if (overriddenMethod == null)
-        {
-            return false;
-        }
-
-        return overriddenMethod.GetAttributes().Any(attr => attr.AttributeClass?.Name == nameof(AutoCommandAttribute));
-    }
-
-    string GetFieldName(IMethodSymbol symbol) => $$"""{{symbol.Name.Substring(0, 1).ToLower()}}{{symbol.Name.Substring(1)}}Command""";
 
     protected override void AddFields(List<string> definitions, IMethodSymbol symbol)
         => definitions.Add($$"""
@@ -115,7 +91,97 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
         var fieldName = GetFieldName(symbol);
         definitions.Add($$"""
 
-                    public ICommand {{symbol.Name}}Command => {{fieldName}} ??= new {{className}}({{(symbol.IsStatic ? string.Empty : "this")}});
-            """);
+        public ICommand {{symbol.Name}}Command => {{fieldName}} ??= new {{className}}({{(symbol.IsStatic ? string.Empty : "this")}});
+""");
+    }
+
+    private string GetCommandClassName(IMethodSymbol symbol) => $"{symbol.Name}CommandClass";
+
+    private string GetFieldName(IMethodSymbol symbol)
+        => $"{symbol.Name.Substring(0, 1).ToLower()}{symbol.Name.Substring(1)}Command";
+
+    private string GetCanExecuteMethodName(IMethodSymbol methodSymbol)
+    {
+        var attributeData = methodSymbol.GetAttributes()
+            .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoCommandAttribute));
+
+        if (attributeData?.ConstructorArguments.Length > 0
+            && attributeData.ConstructorArguments[0].Value is string canExecuteMethodName)
+        {
+            return canExecuteMethodName;
+        }
+
+        return string.Empty;
+    }
+
+    private IMethodSymbol? GetCanExecuteMethod(IMethodSymbol methodSymbol)
+    {
+        var canExecuteMethodName = GetCanExecuteMethodName(methodSymbol);
+        if (string.IsNullOrEmpty(canExecuteMethodName)) return null;
+
+        return methodSymbol.ContainingType.GetMembers()
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(m => m.Name == canExecuteMethodName);
+    }
+
+    private bool ValidateCanExecuteMethod(IMethodSymbol commandMethod, IMethodSymbol canExecuteMethod)
+    {
+        if (canExecuteMethod.ReturnType.SpecialType != SpecialType.System_Boolean)
+        {
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature,
+                canExecuteMethod.Locations.FirstOrDefault(),
+                canExecuteMethod.Name,
+                $"Return type must be bool, found {canExecuteMethod.ReturnType}."));
+            return false;
+        }
+
+        if (canExecuteMethod.Parameters.Length != commandMethod.Parameters.Length)
+        {
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature,
+                canExecuteMethod.Locations.FirstOrDefault(),
+                canExecuteMethod.Name,
+                $"Parameter count mismatch. Expected {commandMethod.Parameters.Length}, found {canExecuteMethod.Parameters.Length}."));
+            return false;
+        }
+
+        for (int i = 0; i < commandMethod.Parameters.Length; i++)
+        {
+            if (!SymbolEqualityComparer.Default.Equals(
+                commandMethod.Parameters[i].Type,
+                canExecuteMethod.Parameters[i].Type))
+            {
+                Context.ReportDiagnostic(Diagnostic.Create(
+                    Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature,
+                    canExecuteMethod.Locations.FirstOrDefault(),
+                    canExecuteMethod.Name,
+                    $"Parameter type mismatch at position {i}. Expected {commandMethod.Parameters[i].Type}, found {canExecuteMethod.Parameters[i].Type}."));
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool IsOverrideWithAutoCommand(IMethodSymbol methodSymbol)
+    {
+        if (!methodSymbol.IsOverride) return false;
+
+        var overriddenMethod = methodSymbol.OverriddenMethod;
+        return overriddenMethod?.GetAttributes()
+            .Any(attr => attr.AttributeClass?.Name == nameof(AutoCommandAttribute)) ?? false;
+    }
+
+    private bool IsValidReturnType(ITypeSymbol type)
+    {
+        return type.SpecialType == SpecialType.System_Void ||
+               (type.Name == "Task" && type.ContainingNamespace?.ToString() == "System.Threading.Tasks");
+    }
+
+    private bool IsAsyncCommand(IMethodSymbol method)
+    {
+        return method.ReturnType.Name == "Task" &&
+               method.ReturnType.ContainingNamespace?.ToString() == "System.Threading.Tasks";
     }
 }

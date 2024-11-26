@@ -5,5 +5,5 @@ namespace MVVM.Generator.Interfaces;
 
 public interface IDependencyAnalyzer
 {
-    ImmutableDictionary<string, ImmutableHashSet<string>> AnalyzeDependencies(INamedTypeSymbol typeSymbol);
+    ImmutableDictionary<string, ImmutableHashSet<string>> AnalyzeDependencies(INamedTypeSymbol typeSymbol, SourceProductionContext context);
 }

@@ -82,6 +82,14 @@ public sealed class ViewModelGenerator : IIncrementalGenerator
         var generationContext = new ClassGenerationContext();
         try
         {
+            var validGenerators = generators
+                .Where(g =>
+                {
+                    g.Context = context;
+                    return g.ValidateSymbol(classSymbol);
+                })
+                .ToArray();
+
             var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 
             generationContext.Interfaces.Clear();
@@ -93,7 +101,7 @@ public sealed class ViewModelGenerator : IIncrementalGenerator
             generationContext.StaticFields.Clear();
             generationContext.StaticProperties.Clear();
 
-            foreach (var generator in generators)
+            foreach (var generator in validGenerators)
             {
                 generator.Context = context;
                 generator.Process(generationContext, classSymbol);

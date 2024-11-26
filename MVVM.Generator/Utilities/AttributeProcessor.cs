@@ -1,12 +1,15 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Linq;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using System.Collections.Concurrent;
-using System.Collections.Immutable;
+
 using MVVM.Generator.Attributes;
-using System.Linq;
 using MVVM.Generator.Interfaces;
-using System.Collections.Generic;
-using System;
 
 namespace MVVM.Generator.Utilities;
 
@@ -17,31 +20,40 @@ public class AttributeProcessor : IDependencyAnalyzer
 
     private readonly ConcurrentDictionary<INamedTypeSymbol, ImmutableDictionary<string, ImmutableHashSet<string>>> _dependencyCache = new(SymbolEqualityComparer.Default);
 
-    public ImmutableDictionary<string, ImmutableHashSet<string>> AnalyzeDependencies(INamedTypeSymbol typeSymbol)
+    public ImmutableDictionary<string, ImmutableHashSet<string>> AnalyzeDependencies(
+        INamedTypeSymbol symbol,
+        SourceProductionContext context)
     {
-        return _dependencyCache.GetOrAdd(typeSymbol, symbol =>
+        Trace.AutoFlush = true;
+        Trace.Listeners.Add(new DefaultTraceListener());
+        Trace.Listeners.Add(new TextWriterTraceListener("generator-debug.log"));
+        Trace.WriteLine($"Analyzing dependencies for {symbol.Name}");
+        var dependencyMap = new Dictionary<string, HashSet<string>>();
+
+
+        var autoDependencies = BuildAutoDependencies(symbol);
+        Trace.WriteLine($"Auto dependencies: {string.Join(", ", autoDependencies.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
+
+        var manualDependencies = BuildManualDependencies(symbol);
+        Trace.WriteLine($"Manual dependencies: {string.Join(", ", manualDependencies
+            .SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
+
+        // Merge dependencies and log results
+        foreach (var kvp in autoDependencies.Concat(manualDependencies))
         {
-            var builder = ImmutableDictionary.CreateBuilder<string, ImmutableHashSet<string>>();
-            var manualDependencies = BuildManualDependencies(symbol);
-            var autoDependencies = BuildAutoDependencies(symbol);
-
-            // Merge manual and auto dependencies
-            foreach (var kvp in manualDependencies.Concat(autoDependencies))
+            var property = kvp.Key;
+            if (!dependencyMap.ContainsKey(property))
             {
-                var property = kvp.Key;
-                var dependencies = kvp.Value;
-                if (!builder.ContainsKey(property))
-                {
-                    builder[property] = dependencies;
-                }
-                else
-                {
-                    builder[property] = builder[property].Union(dependencies);
-                }
+                dependencyMap[property] = new HashSet<string>();
             }
+            var before = dependencyMap[property].Count;
+            dependencyMap[property].UnionWith(kvp.Value);
+        }
+        Trace.WriteLine($"Merged dependencies: {string.Join(", ", dependencyMap.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
 
-            return builder.ToImmutable();
-        });
+        return dependencyMap.ToImmutableDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.ToImmutableHashSet());
     }
 
     private ImmutableDictionary<string, ImmutableHashSet<string>> BuildAutoDependencies(INamedTypeSymbol typeSymbol)

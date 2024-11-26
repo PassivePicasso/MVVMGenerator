@@ -3,14 +3,15 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Collections.Specialized;
 using System.Linq;
+
 using Microsoft.CodeAnalysis;
+
 using MVVM.Generator.Attributes;
 using MVVM.Generator.Diagnostics;
 using MVVM.Generator.Interfaces;
 using MVVM.Generator.Utilities;
 
 namespace MVVM.Generator.Generators;
-
 internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, AutoNotifyAttribute>
 {
     private const string AttrUsageName = nameof(AttributeUsageAttribute);
@@ -20,11 +21,57 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
     private readonly IDependencyAnalyzer _dependencyAnalyzer;
     private readonly PropertyGenerator _propertyGenerator;
+    private ImmutableDictionary<string, ImmutableHashSet<string>>? _cachedDependencies;
 
     public AutoNotifyGenerator()
     {
         _dependencyAnalyzer = new AttributeProcessor();
         _propertyGenerator = new PropertyGenerator();
+    }
+
+    public override bool ValidateSymbol<TVS>(TVS symbol)
+    {
+        IFieldSymbol fieldSymbol = symbol as IFieldSymbol;
+        if(fieldSymbol == null) return false;
+
+        if (fieldSymbol.Type.IsStatic)
+        {
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoNotify.StaticType,
+                fieldSymbol.Locations.FirstOrDefault(),
+                fieldSymbol.Name,
+                fieldSymbol.Type.Name));
+            return false;
+        }
+
+        // Cache dependencies during validation
+        _cachedDependencies = _dependencyAnalyzer.AnalyzeDependencies(fieldSymbol.ContainingType, Context);
+
+        // Check for missing dependencies
+        foreach (var dep in _cachedDependencies.GetValueOrDefault(fieldSymbol.Name, ImmutableHashSet<string>.Empty))
+        {
+            if (!_cachedDependencies.ContainsKey(dep))
+            {
+                Context.ReportDiagnostic(Diagnostic.Create(
+                    Descriptors.Generator.AutoNotify.DependencyNotFound,
+                    fieldSymbol.Locations.FirstOrDefault(),
+                    fieldSymbol.Name,
+                    dep));
+                return false;
+            }
+        }
+
+        // Check for circular dependencies
+        if (HasCircularDependencies(_cachedDependencies))
+        {
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoNotify.CircularDependency,
+                fieldSymbol.Locations.FirstOrDefault(),
+                fieldSymbol.Name));
+            return false;
+        }
+
+        return true;
     }
 
     protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)
@@ -63,20 +110,10 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
     protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol)
     {
-        var dependencies = _dependencyAnalyzer.AnalyzeDependencies(fieldSymbol.ContainingType);
-        if (!ValidateSymbol(fieldSymbol))
+        if (_cachedDependencies == null)
             return;
 
-        if (HasCircularDependencies(dependencies))
-        {
-            Context.ReportDiagnostic(Diagnostic.Create(
-                Descriptors.Generator.AutoNotify.CircularDependency,
-                fieldSymbol.Locations.FirstOrDefault(),
-                fieldSymbol.Name));
-            return;
-        }
-
-        _propertyGenerator.AddProperties(properties, fieldSymbol, dependencies);
+        _propertyGenerator.AddProperties(properties, fieldSymbol, _cachedDependencies);
     }
 
     protected override void AddInterfaces(List<string> interfaces, IFieldSymbol fieldSymbol)
@@ -129,65 +166,5 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         }
 
         return dependencies.Keys.Any(HasCycle);
-    }
-    protected bool ValidateSymbol(IFieldSymbol fieldSymbol)
-    {
-        // Check if type is valid for property generation
-        if (fieldSymbol.Type.IsStatic || fieldSymbol.Type.IsAbstract)
-        {
-            Context.ReportDiagnostic(Diagnostic.Create(
-                Descriptors.Generator.AutoNotify.InvalidPropertyType,
-                fieldSymbol.Locations.FirstOrDefault(),
-                fieldSymbol.Name,
-                fieldSymbol.Type.Name));
-            return false;
-        }
-
-        // Analyze dependencies before generation
-        var dependencies = _dependencyAnalyzer.AnalyzeDependencies(fieldSymbol.ContainingType);
-
-        // Check for missing dependencies
-        foreach (var dep in dependencies.GetValueOrDefault(fieldSymbol.Name, ImmutableHashSet<string>.Empty))
-        {
-            if (!dependencies.ContainsKey(dep))
-            {
-                Context.ReportDiagnostic(Diagnostic.Create(
-                    Descriptors.Generator.AutoNotify.DependencyNotFound,
-                    fieldSymbol.Locations.FirstOrDefault(),
-                    fieldSymbol.Name,
-                    dep));
-                return false;
-            }
-        }
-
-        // Check for circular dependencies
-        if (HasCircularDependencies(dependencies))
-        {
-            Context.ReportDiagnostic(Diagnostic.Create(
-                Descriptors.Generator.AutoNotify.CircularDependency,
-                fieldSymbol.Locations.FirstOrDefault(),
-                fieldSymbol.Name));
-            return false;
-        }
-
-        return true;
-    }
-
-    private void AddFallbackProperty(List<string> properties, IFieldSymbol fieldSymbol)
-    {
-        // Basic property generation without dependencies
-        properties.Add($@"
-        public {fieldSymbol.Type} {fieldSymbol.Name}
-        {{
-            get => _{fieldSymbol.Name};
-            set 
-            {{
-                if (!EqualityComparer<{fieldSymbol.Type}>.Default.Equals(_{fieldSymbol.Name}, value))
-                {{
-                    _{fieldSymbol.Name} = value;
-                    OnPropertyChanged(nameof({fieldSymbol.Name}));
-                }}
-            }}
-        }}");
     }
 }

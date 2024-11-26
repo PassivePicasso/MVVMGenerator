@@ -62,4 +62,6 @@ internal abstract class AttributeGeneratorHandler<TSymbol, TAttribute> : IAttrib
             _ => string.Empty,
         };
     }
+
+    public virtual bool ValidateSymbol<TVS>(TVS symbol) where TVS : ISymbol => true;
 }
