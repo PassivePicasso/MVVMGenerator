@@ -81,13 +81,23 @@ public sealed class ViewModelGenerator : IIncrementalGenerator
         var generationContext = new ClassGenerationContext();
         try
         {
-            var validGenerators = generators
-                .Where(g =>
-                {
-                    g.Context = context;
-                    return g.ValidateSymbol(classSymbol);
-                })
+            // Don't validate at class level
+            var activeGenerators = generators.Select(g => { g.Context = context; return g; }).ToArray();
+
+            // Get members with any of our attributes
+            var membersToProcess = classSymbol.GetMembers()
+                .Where(member => member.GetAttributes().Any(attr =>
+                    activeGenerators.Any(g => attr.AttributeClass?.Name == g.GetAttributeName())));
+
+            // Validate and filter members per generator
+            var validGeneratorsByMember = membersToProcess
+                .Select(member => (Member: member,
+                    Generators: activeGenerators.Where(g => g.ValidateSymbol(member))))
+                .Where(x => x.Generators.Any())
                 .ToArray();
+
+            if (!validGeneratorsByMember.Any())
+                return null;
 
             var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 
@@ -100,7 +110,8 @@ public sealed class ViewModelGenerator : IIncrementalGenerator
             generationContext.StaticFields.Clear();
             generationContext.StaticProperties.Clear();
 
-            foreach (var generator in validGenerators)
+            var uniqueGenerators = validGeneratorsByMember.SelectMany(kvp => kvp.Generators).Distinct();
+            foreach (var generator in uniqueGenerators)
             {
                 generator.Context = context;
                 generator.Process(generationContext, classSymbol);

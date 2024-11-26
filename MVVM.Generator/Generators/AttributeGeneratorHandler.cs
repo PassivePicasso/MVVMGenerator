@@ -13,11 +13,11 @@ internal abstract class AttributeGeneratorHandler<TSymbol, TAttribute> : IAttrib
     where TSymbol : ISymbol
     where TAttribute : Attribute
 {
-    private const string LogPrefix = "AttributeGeneratorHandler: ";
     protected static readonly string AttributeName = typeof(TAttribute).Name;
     private Func<ISymbol, bool> SymbolContainsAttribute => p => p.GetAttributes().Any(SymbolAttribute);
     private Func<AttributeData, bool> SymbolAttribute => a => a?.AttributeClass?.Name == AttributeName;
     public SourceProductionContext Context { get; set; }
+    public string GetAttributeName() => typeof(TAttribute).Name;
     public void Process(ClassGenerationContext context, INamedTypeSymbol classSymbol)
     {
         if (!classSymbol.GetMembers().Any(SymbolContainsAttribute)) return;
@@ -52,7 +52,6 @@ internal abstract class AttributeGeneratorHandler<TSymbol, TAttribute> : IAttrib
     protected virtual void AddInterfaceImplementations(List<string> definitions, TSymbol symbol) { }
     protected virtual void AddFields(List<string> definitions, TSymbol symbol) { }
     protected virtual void AddProperties(List<string> definitions, TSymbol symbol) { }
-
     protected string GetReturnedType(TSymbol symbol)
     {
         return symbol switch
@@ -63,6 +62,5 @@ internal abstract class AttributeGeneratorHandler<TSymbol, TAttribute> : IAttrib
             _ => string.Empty,
         };
     }
-
     public virtual bool ValidateSymbol<TVS>(TVS symbol) where TVS : ISymbol => true;
 }
