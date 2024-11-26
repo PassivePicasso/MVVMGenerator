@@ -13,6 +13,7 @@ internal abstract class AttributeGeneratorHandler<TSymbol, TAttribute> : IAttrib
     where TSymbol : ISymbol
     where TAttribute : Attribute
 {
+    private const string LogPrefix = "AttributeGeneratorHandler: ";
     protected static readonly string AttributeName = typeof(TAttribute).Name;
     private Func<ISymbol, bool> SymbolContainsAttribute => p => p.GetAttributes().Any(SymbolAttribute);
     private Func<AttributeData, bool> SymbolAttribute => a => a?.AttributeClass?.Name == AttributeName;

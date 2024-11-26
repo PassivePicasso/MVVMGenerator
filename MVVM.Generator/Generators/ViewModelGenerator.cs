@@ -19,7 +19,6 @@ public sealed class ViewModelGenerator : IIncrementalGenerator
 {
     public const string Suffix = ".ViewModel.cs";
     private readonly CodeRenderer _codeRenderer = new CodeRenderer();
-    private readonly ErrorReporter _errorReporter = new ErrorReporter();
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var classDeclarations = context.SyntaxProvider
@@ -136,7 +135,7 @@ public sealed class ViewModelGenerator : IIncrementalGenerator
         }
         catch (Exception ex)
         {
-            _errorReporter.ReportError(context, "BAG002", $"Error generating partial class for {classSymbol.Name}: {ex.Message}");
+            LogManager.LogError($"Error generating partial class for {classSymbol.Name}: {ex.Message}");
             return null;
         }
     }

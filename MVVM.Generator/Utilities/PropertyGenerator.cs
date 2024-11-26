@@ -13,115 +13,122 @@ namespace MVVM.Generator.Utilities;
 
 public class PropertyGenerator
 {
+    private const string LogPrefix = "PropertyGenerator: ";
+
     private const string INCCName = nameof(INotifyCollectionChanged);
     public void AddProperties(List<string> properties, IFieldSymbol fieldSymbol, ImmutableDictionary<string, ImmutableHashSet<string>> reverseDependsOnLookup)
     {
-        var fieldName = fieldSymbol.Name;
-        var propertyName = GetPropertyName(fieldSymbol);
-        var type = TypeHelper.GetTypeName(fieldSymbol.Type);
-        var defines = string.Empty;
-        var prefix = string.Empty;
-        var suffix = string.Empty;
-        var virtualPrefix = string.Empty;
-        var getVisibility = string.Empty;
-        var setVisibility = string.Empty;
-        var staticString = fieldSymbol.IsStatic ? "static " : string.Empty;
+        LogManager.Log($"{LogPrefix}Generating property for field {fieldSymbol.Name}");
+        var startTime = System.Diagnostics.Stopwatch.StartNew();
 
-        var propertyAttributesString = ReconstructAttributes(fieldSymbol);
-
-        var attributeData = fieldSymbol.GetAttributes()
-            .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoNotifyAttribute));
-
-        if (attributeData != null && attributeData.NamedArguments.Length > 0)
+        try
         {
-            foreach (var namedArg in attributeData.NamedArguments)
+            var fieldName = fieldSymbol.Name;
+            var propertyName = GetPropertyName(fieldSymbol);
+            var type = TypeHelper.GetTypeName(fieldSymbol.Type);
+            var defines = string.Empty;
+            var prefix = string.Empty;
+            var suffix = string.Empty;
+            var virtualPrefix = string.Empty;
+            var getVisibility = string.Empty;
+            var setVisibility = string.Empty;
+            var staticString = fieldSymbol.IsStatic ? "static " : string.Empty;
+
+            var propertyAttributesString = ReconstructAttributes(fieldSymbol);
+
+            var attributeData = fieldSymbol.GetAttributes()
+                .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoNotifyAttribute));
+
+            if (attributeData != null && attributeData.NamedArguments.Length > 0)
             {
-                var argValue = namedArg.Value.Value;
-                if (argValue == null) continue;
-
-                switch (namedArg.Key)
+                foreach (var namedArg in attributeData.NamedArguments)
                 {
-                    case nameof(AutoNotifyAttribute.GetterAccess):
-                        getVisibility = $"{((Access)argValue).ToString().ToLower()} ";
-                        break;
-                    case nameof(AutoNotifyAttribute.SetterAccess):
-                        setVisibility = $"{((Access)argValue).ToString().ToLower()} ";
-                        break;
-                    case nameof(AutoNotifyAttribute.IsVirtual):
-                        virtualPrefix = (bool)argValue ? "virtual " : string.Empty;
-                        break;
-                    case nameof(AutoNotifyAttribute.PropertyChangedHandlerName):
-                        {
-                            var methodName = argValue as string;
-                            if (methodName == null)
-                                break;
-                            var containingType = fieldSymbol.ContainingType;
-                            var matchedMethodSymbol = containingType.GetMembers()
-                                .OfType<IMethodSymbol>()
-                                .FirstOrDefault(m => m.Name == methodName);
+                    var argValue = namedArg.Value.Value;
+                    if (argValue == null) continue;
 
-                            ValidateEventHandler(methodName, containingType, matchedMethodSymbol);
+                    switch (namedArg.Key)
+                    {
+                        case nameof(AutoNotifyAttribute.GetterAccess):
+                            getVisibility = $"{((Access)argValue).ToString().ToLower()} ";
+                            break;
+                        case nameof(AutoNotifyAttribute.SetterAccess):
+                            setVisibility = $"{((Access)argValue).ToString().ToLower()} ";
+                            break;
+                        case nameof(AutoNotifyAttribute.IsVirtual):
+                            virtualPrefix = (bool)argValue ? "virtual " : string.Empty;
+                            break;
+                        case nameof(AutoNotifyAttribute.PropertyChangedHandlerName):
+                            {
+                                var methodName = argValue as string;
+                                if (methodName == null)
+                                    break;
+                                var containingType = fieldSymbol.ContainingType;
+                                var matchedMethodSymbol = containingType.GetMembers()
+                                    .OfType<IMethodSymbol>()
+                                    .FirstOrDefault(m => m.Name == methodName);
 
-                            string handlerFieldName = $"_{fieldName}ChangedHandler";
-                            defines = $$"""
+                                ValidateEventHandler(methodName, containingType, matchedMethodSymbol);
+
+                                string handlerFieldName = $"_{fieldName}ChangedHandler";
+                                defines = $$"""
 
         private EventHandler {{handlerFieldName}};
 """;
 
-                            suffix = $$"""
+                                suffix = $$"""
 
                 if ({{handlerFieldName}} == null)
                     {{handlerFieldName}} = {{methodName}};
                 {{handlerFieldName}}.Invoke(this, EventArgs.Empty);
 """;
-                        }
-                        break;
-                    case nameof(AutoNotifyAttribute.CollectionChangedHandlerName):
-                        {
-                            var methodName = argValue as string;
-                            if (methodName == null)
-                                break;
-                            var containingType = fieldSymbol.ContainingType;
-                            var matchedMethodSymbol = containingType.GetMembers()
-                                .OfType<IMethodSymbol>()
-                                .FirstOrDefault(m => m.Name == methodName);
+                            }
+                            break;
+                        case nameof(AutoNotifyAttribute.CollectionChangedHandlerName):
+                            {
+                                var methodName = argValue as string;
+                                if (methodName == null)
+                                    break;
+                                var containingType = fieldSymbol.ContainingType;
+                                var matchedMethodSymbol = containingType.GetMembers()
+                                    .OfType<IMethodSymbol>()
+                                    .FirstOrDefault(m => m.Name == methodName);
 
-                            ValidateCollectionChangedHandler(methodName, containingType, matchedMethodSymbol);
+                                ValidateCollectionChangedHandler(methodName, containingType, matchedMethodSymbol);
 
-                            string handlerFieldName = $"_{fieldName}CollectionChangedHandler";
-                            defines = $"""
+                                string handlerFieldName = $"_{fieldName}CollectionChangedHandler";
+                                defines = $"""
                                     private NotifyCollectionChangedEventHandler {handlerFieldName};
                             """;
-                            prefix = $$"""
+                                prefix = $$"""
 
                 if ({{fieldName}} != null && {{handlerFieldName}} != null)
                 {
                     (({{INCCName}}){{fieldName}}).CollectionChanged -= {{handlerFieldName}};
                 }
 """;
-                            suffix = $$"""
+                                suffix = $$"""
                 if ({{fieldName}} != null && {{handlerFieldName}} != null)
                 {
                     {{handlerFieldName}} = {{methodName}};
                     (({{INCCName}}){{fieldName}}).CollectionChanged += {{handlerFieldName}};
                 }
 """;
-                        }
-                        break;
+                            }
+                            break;
+                    }
                 }
             }
-        }
 
-        // Handle DependsOnAttribute - Look up by property name
-        var dependsSuffix = string.Empty;
-        if (reverseDependsOnLookup.TryGetValue(propertyName, out var dependentProperties))
-        {
-            dependsSuffix = dependentProperties.Aggregate(string.Empty, (current, p) => 
-                current + $"\n                OnPropertyChanged(nameof({p}));");
-        }
+            // Handle DependsOnAttribute - Look up by property name
+            var dependsSuffix = string.Empty;
+            if (reverseDependsOnLookup.TryGetValue(propertyName, out var dependentProperties))
+            {
+                dependsSuffix = dependentProperties.Aggregate(string.Empty, (current, p) =>
+                    current + $"\n                OnPropertyChanged(nameof({p}));");
+            }
 
-        // Generate the property code
-        string item = $$"""
+            // Generate the property code
+            string item = $$"""
 
 {{propertyAttributesString}}
         public {{staticString}}{{virtualPrefix}}{{type}} {{propertyName}}
@@ -134,11 +141,18 @@ public class PropertyGenerator
             }
         }
 """;
-        if (!string.IsNullOrWhiteSpace(defines))
-            item = $"""
+            if (!string.IsNullOrWhiteSpace(defines))
+                item = $"""
 {defines}{item}
 """;
             properties.Add(item);
+            LogManager.Log($"{LogPrefix}Completed property generation in {startTime.ElapsedMilliseconds}ms");
+        }
+        catch (Exception ex)
+        {
+            LogManager.LogError($"{LogPrefix}Failed to generate property for {fieldSymbol.Name}", ex);
+            throw;
+        }
     }
 
     public static string GetPropertyName(IFieldSymbol fieldSymbol)

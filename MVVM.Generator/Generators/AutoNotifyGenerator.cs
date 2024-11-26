@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.Linq;
 
 using Microsoft.CodeAnalysis;
@@ -14,6 +15,7 @@ using MVVM.Generator.Utilities;
 namespace MVVM.Generator.Generators;
 internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, AutoNotifyAttribute>
 {
+    private const string LogPrefix = "AutoNotifyGenerator: ";
     private const string AttrUsageName = nameof(AttributeUsageAttribute);
     private const string AttrTargetName = nameof(AttributeTargets);
     private const string AttrTypeName = nameof(AutoNotifyAttribute);
@@ -25,17 +27,26 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
     public AutoNotifyGenerator()
     {
+        LogManager.Log($"{LogPrefix}Initializing generator");
         _dependencyAnalyzer = new AttributeProcessor();
         _propertyGenerator = new PropertyGenerator();
     }
 
     public override bool ValidateSymbol<TVS>(TVS symbol)
     {
+        LogManager.Log($"{LogPrefix}Validating symbol {symbol?.GetType().Name}");
+
         IFieldSymbol fieldSymbol = symbol as IFieldSymbol;
-        if(fieldSymbol == null) return false;
+        if (fieldSymbol == null)
+        {
+            Debugger.Break();
+            LogManager.LogError($"{LogPrefix}Symbol is not an IFieldSymbol");
+            return false;
+        }
 
         if (fieldSymbol.Type.IsStatic)
         {
+            LogManager.LogError($"{LogPrefix}Static type detected: {fieldSymbol.Name} of type {fieldSymbol.Type.Name}");
             Context.ReportDiagnostic(Diagnostic.Create(
                 Descriptors.Generator.AutoNotify.StaticType,
                 fieldSymbol.Locations.FirstOrDefault(),
@@ -44,7 +55,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
             return false;
         }
 
-        // Cache dependencies during validation
+        LogManager.Log($"{LogPrefix}Analyzing dependencies for {fieldSymbol.ContainingType.Name}");
         _cachedDependencies = _dependencyAnalyzer.AnalyzeDependencies(fieldSymbol.ContainingType, Context);
 
         // Check for missing dependencies
@@ -52,6 +63,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         {
             if (!_cachedDependencies.ContainsKey(dep))
             {
+                LogManager.LogError($"{LogPrefix}Missing dependency: {dep} for field {fieldSymbol.Name}");
                 Context.ReportDiagnostic(Diagnostic.Create(
                     Descriptors.Generator.AutoNotify.DependencyNotFound,
                     fieldSymbol.Locations.FirstOrDefault(),
@@ -64,6 +76,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         // Check for circular dependencies
         if (HasCircularDependencies(_cachedDependencies))
         {
+            LogManager.LogError($"{LogPrefix}Circular dependency detected for field {fieldSymbol.Name}");
             Context.ReportDiagnostic(Diagnostic.Create(
                 Descriptors.Generator.AutoNotify.CircularDependency,
                 fieldSymbol.Locations.FirstOrDefault(),
@@ -71,11 +84,13 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
             return false;
         }
 
+        LogManager.Log($"{LogPrefix}Successfully validated {fieldSymbol.Name}");
         return true;
     }
 
     protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)
     {
+        LogManager.Log($"{LogPrefix}Adding usings for {fieldSymbol.Name}");
         usings.Add("using System.ComponentModel;");
         usings.Add("using System.Runtime.CompilerServices;");
         NamespaceExtractor.AddNamespaceUsings(usings, fieldSymbol.Type);
@@ -113,6 +128,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         if (_cachedDependencies == null)
             return;
 
+        LogManager.Log($"{LogPrefix}Generating properties for {fieldSymbol.Name}");
         _propertyGenerator.AddProperties(properties, fieldSymbol, _cachedDependencies);
     }
 
@@ -139,6 +155,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
 
     private bool HasCircularDependencies(ImmutableDictionary<string, ImmutableHashSet<string>> dependencies)
     {
+        LogManager.Log($"{LogPrefix}Checking for circular dependencies");
         var visited = new HashSet<string>();
         var stack = new HashSet<string>();
 

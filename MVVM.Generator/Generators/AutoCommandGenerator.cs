@@ -11,15 +11,19 @@ namespace MVVM.Generator.Generators;
 
 internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, AutoCommandAttribute>
 {
+    private const string LogPrefix = "AutoCommandGenerator: ";
     private readonly CommandClassGenerator _commandClassGenerator = new();
 
     public override bool ValidateSymbol<T>(T symbol)
     {
+        LogManager.Log($"{LogPrefix}Validating symbol {symbol?.GetType().Name}");
+
         var methodSymbol = symbol as IMethodSymbol;
         if (methodSymbol == null)
             return false;
         if (methodSymbol.DeclaredAccessibility != Accessibility.Public)
         {
+            LogManager.LogError($"{LogPrefix}Method {methodSymbol.Name} is not public");
             Context.ReportDiagnostic(Diagnostic.Create(
                 Descriptors.Generator.AutoCommand.NotPublic,
                 methodSymbol.Locations.FirstOrDefault(),
@@ -29,6 +33,7 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
 
         if (methodSymbol.Parameters.Length > 1)
         {
+            LogManager.LogError($"{LogPrefix}Method {methodSymbol.Name} has invalid parameter count: {methodSymbol.Parameters.Length}");
             Context.ReportDiagnostic(Diagnostic.Create(
                 Descriptors.Generator.AutoCommand.InvalidMethodSignature,
                 methodSymbol.Locations.FirstOrDefault(),
@@ -39,6 +44,7 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
 
         if (!IsValidReturnType(methodSymbol.ReturnType))
         {
+            LogManager.LogError($"{LogPrefix}Method {methodSymbol.Name} has invalid return type: {methodSymbol.ReturnType}");
             Context.ReportDiagnostic(Diagnostic.Create(
                 Descriptors.Generator.AutoCommand.InvalidMethodSignature,
                 methodSymbol.Locations.FirstOrDefault(),
@@ -48,16 +54,22 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
         }
 
         var canExecuteMethod = GetCanExecuteMethod(methodSymbol);
-        if (canExecuteMethod != null && !ValidateCanExecuteMethod(methodSymbol, canExecuteMethod))
+        if (canExecuteMethod != null)
         {
-            return false;
+            LogManager.Log($"{LogPrefix}Validating CanExecute method for {methodSymbol.Name}");
+            if (!ValidateCanExecuteMethod(methodSymbol, canExecuteMethod))
+            {
+                return false;
+            }
         }
 
+        LogManager.Log($"{LogPrefix}Successfully validated {methodSymbol.Name}");
         return true;
     }
 
     protected override void AddUsings(List<string> usings, IMethodSymbol symbol)
     {
+        LogManager.Log($"{LogPrefix}Adding usings for {symbol.Name}");
         usings.Add("using System.Windows.Input;");
         if (symbol.Parameters.Length > 0)
         {
@@ -71,6 +83,7 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
 
     protected override void AddNestedClasses(List<string> definitions, IMethodSymbol symbol)
     {
+        LogManager.Log($"{LogPrefix}Generating command class for {symbol.Name}");
         if (IsOverrideWithAutoCommand(symbol)) return;
 
         var className = GetCommandClassName(symbol);
@@ -126,8 +139,10 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
 
     private bool ValidateCanExecuteMethod(IMethodSymbol commandMethod, IMethodSymbol canExecuteMethod)
     {
+        LogManager.Log($"{LogPrefix}Validating CanExecute method {canExecuteMethod.Name}");
         if (canExecuteMethod.ReturnType.SpecialType != SpecialType.System_Boolean)
         {
+            LogManager.LogError($"{LogPrefix}Invalid return type for CanExecute method {canExecuteMethod.Name}: {canExecuteMethod.ReturnType}");
             Context.ReportDiagnostic(Diagnostic.Create(
                 Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature,
                 canExecuteMethod.Locations.FirstOrDefault(),
@@ -138,6 +153,7 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
 
         if (canExecuteMethod.Parameters.Length != commandMethod.Parameters.Length)
         {
+            LogManager.LogError($"{LogPrefix}Parameter count mismatch in CanExecute method {canExecuteMethod.Name}");
             Context.ReportDiagnostic(Diagnostic.Create(
                 Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature,
                 canExecuteMethod.Locations.FirstOrDefault(),

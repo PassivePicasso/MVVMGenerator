@@ -15,6 +15,7 @@ namespace MVVM.Generator.Utilities;
 
 public class AttributeProcessor : IDependencyAnalyzer
 {
+    private const string LogPrefix = "AttributeProcessor: ";
     private const string AutoNotifyAttributeName = nameof(AutoNotifyAttribute);
     private const string DependsOnAttributeName = nameof(DependsOnAttribute);
 
@@ -24,18 +25,15 @@ public class AttributeProcessor : IDependencyAnalyzer
         INamedTypeSymbol symbol,
         SourceProductionContext context)
     {
-        Trace.AutoFlush = true;
-        Trace.Listeners.Add(new DefaultTraceListener());
-        Trace.Listeners.Add(new TextWriterTraceListener("generator-debug.log"));
-        Trace.WriteLine($"Analyzing dependencies for {symbol.Name}");
+        LogManager.Log($"{LogPrefix}Starting dependency analysis for {symbol.Name}");
         var dependencyMap = new Dictionary<string, HashSet<string>>();
 
 
         var autoDependencies = BuildAutoDependencies(symbol);
-        Trace.WriteLine($"Auto dependencies: {string.Join(", ", autoDependencies.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
+        LogManager.Log($"{LogPrefix}Auto dependencies: {string.Join(", ", autoDependencies.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
 
         var manualDependencies = BuildManualDependencies(symbol);
-        Trace.WriteLine($"Manual dependencies: {string.Join(", ", manualDependencies
+        LogManager.Log($"{LogPrefix}Manual dependencies: {string.Join(", ", manualDependencies
             .SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
 
         // Merge dependencies and log results
@@ -49,7 +47,7 @@ public class AttributeProcessor : IDependencyAnalyzer
             var before = dependencyMap[property].Count;
             dependencyMap[property].UnionWith(kvp.Value);
         }
-        Trace.WriteLine($"Merged dependencies: {string.Join(", ", dependencyMap.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
+        LogManager.Log($"{LogPrefix}Merged dependencies: {string.Join(", ", dependencyMap.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
 
         return dependencyMap.ToImmutableDictionary(
             kvp => kvp.Key,
