@@ -33,25 +33,11 @@ internal abstract class AttributeGeneratorHandler<TSymbol, TAttribute> : IAttrib
 
         foreach (var tSymbol in symbols.OfType<TSymbol>())
         {
-            AddUsings(context.Usings, tSymbol);
-            AddInterfaces(context.Interfaces, tSymbol);
-            AddNestedClasses(context.NestedClasses, tSymbol);
-            AddInterfaceImplementations(context.InterfaceImplementations, tSymbol);
-            AddFields(context.Fields, tSymbol);
-            AddProperties(context.Properties, tSymbol);
-            AddStaticFields(context.StaticFields, tSymbol);
-            AddStaticProperties(context.StaticProperties, tSymbol);
+            Execute(context, tSymbol);
         }
     }
     protected virtual void BeforeProcessAttribute(ClassGenerationContext context, INamedTypeSymbol classSymbol) { }
-    protected virtual void AddUsings(List<string> definitions, TSymbol symbol) { }
-    protected virtual void AddInterfaces(List<string> definitions, TSymbol symbol) { }
-    protected virtual void AddNestedClasses(List<string> definitions, TSymbol symbol) { }
-    protected virtual void AddStaticFields(List<string> definitions, TSymbol symbol) { }
-    protected virtual void AddStaticProperties(List<string> definitions, TSymbol symbol) { }
-    protected virtual void AddInterfaceImplementations(List<string> definitions, TSymbol symbol) { }
-    protected virtual void AddFields(List<string> definitions, TSymbol symbol) { }
-    protected virtual void AddProperties(List<string> definitions, TSymbol symbol) { }
+    protected virtual void Execute(ClassGenerationContext context, TSymbol symbol) { }
     protected string GetReturnedType(TSymbol symbol)
     {
         return symbol switch

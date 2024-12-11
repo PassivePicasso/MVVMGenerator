@@ -88,12 +88,12 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         return true;
     }
 
-    protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)
+    protected override void Execute(ClassGenerationContext context, IFieldSymbol fieldSymbol)
     {
         LogManager.Log($"{LogPrefix}Adding usings for {fieldSymbol.Name}");
-        usings.Add("using System.ComponentModel;");
-        usings.Add("using System.Runtime.CompilerServices;");
-        NamespaceExtractor.AddNamespaceUsings(usings, fieldSymbol.Type);
+        context.Usings.Add("using System.ComponentModel;");
+        context.Usings.Add("using System.Runtime.CompilerServices;");
+        NamespaceExtractor.AddNamespaceUsings(context.Usings, fieldSymbol.Type);
 
         foreach (var fieldAttribute in fieldSymbol.GetAttributes())
         {
@@ -107,12 +107,12 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
             var result = (AttributeTargets)(int)targets;
             var validOnProperty = result.HasFlag(AttributeTargets.Property);
             if (validOnProperty && fieldAttribute?.AttributeClass != null)
-                NamespaceExtractor.AddNamespaceUsings(usings, fieldAttribute.AttributeClass);
+                NamespaceExtractor.AddNamespaceUsings(context.Usings, fieldAttribute.AttributeClass);
         }
 
         if (fieldSymbol.Type is INamedTypeSymbol namedTypeSymbol && namedTypeSymbol.IsGenericType)
             foreach (var typeArgSymbol in namedTypeSymbol.TypeArguments)
-                NamespaceExtractor.AddNamespaceUsings(usings, typeArgSymbol);
+                NamespaceExtractor.AddNamespaceUsings(context.Usings, typeArgSymbol);
 
         var attributeData = fieldSymbol.GetAttributes()
             .FirstOrDefault(ad => ad.AttributeClass?.Name == AttrTypeName);
@@ -120,29 +120,23 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
             .Any(na => na.Key == nameof(AutoNotifyAttribute.CollectionChangedHandlerName)) ?? false;
         var isNotifyingCollection = fieldSymbol.Type.AllInterfaces.Any(i => i.Name == INCCName);
         if (isNotifyingCollection && hasChangeHandler)
-            usings.Add("using System.Collections.Specialized;");
-    }
+            context.Usings.Add("using System.Collections.Specialized;");
 
-    protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol)
-    {
+
         if (_cachedDependencies == null)
             return;
 
         LogManager.Log($"{LogPrefix}Generating properties for {fieldSymbol.Name}");
-        _propertyGenerator.AddProperties(properties, fieldSymbol, _cachedDependencies);
-    }
+        _propertyGenerator.AddProperties(context.Properties, fieldSymbol, _cachedDependencies);
 
-    protected override void AddInterfaces(List<string> interfaces, IFieldSymbol fieldSymbol)
-    {
-        if (!interfaces.Contains("INotifyPropertyChanged"))
-            interfaces.Add("INotifyPropertyChanged");
-    }
 
-    protected override void AddInterfaceImplementations(List<string> impls, IFieldSymbol fieldSymbol)
-    {
-        if (!impls.Any(i => i.Contains("PropertyChanged")))
+        if (!context.Interfaces.Contains("INotifyPropertyChanged"))
+            context.Interfaces.Add("INotifyPropertyChanged");
+
+
+        if (!context.InterfaceImplementations.Any(i => i.Contains("PropertyChanged")))
         {
-            impls.Add($$"""
+            context.InterfaceImplementations.Add($$"""
 
         public event PropertyChangedEventHandler? PropertyChanged;
         void OnPropertyChanged([CallerMemberName] string? propertyName = null) 

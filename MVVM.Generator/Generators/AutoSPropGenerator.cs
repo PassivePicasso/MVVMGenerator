@@ -1,48 +1,38 @@
-﻿using System.Collections.Generic;
-
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 
 using MVVM.Generator.Attributes;
 using MVVM.Generator.Utilities;
 
-namespace MVVM.Generator.Generators
+namespace MVVM.Generator.Generators;
+
+internal class AutoSPropGenerator : AttributeGeneratorHandler<IFieldSymbol, AutoSPropAttribute>
 {
-    internal class AutoSPropGenerator : AttributeGeneratorHandler<IFieldSymbol, AutoSPropAttribute>
+    protected override void Execute(ClassGenerationContext context, IFieldSymbol fieldSymbol)
     {
-        protected override void AddUsings(List<string> usings, IFieldSymbol fieldSymbol)
-        {
-            usings.Add("using Avalonia;");
-            NamespaceExtractor.AddNamespaceUsings(usings, fieldSymbol.Type);
-        }
+        context.Usings.Add("using Avalonia;");
+        NamespaceExtractor.AddNamespaceUsings(context.Usings, fieldSymbol.Type);
 
-        string GetName(IFieldSymbol fieldSymbol)
-        {
-            return $$"""
-            {{fieldSymbol.Name.Substring(0, 1).ToUpper()}}{{fieldSymbol.Name.Substring(1)}}
-            """;
-        }
+        string name = GetName(fieldSymbol);
+        string type = GetReturnedType(fieldSymbol);
 
+        context.Fields.Add($$"""
+                        public static readonly StyledProperty<{{fieldSymbol.Type.Name}}> {{name}}Property =
+                            AvaloniaProperty.Register<{{fieldSymbol.ContainingType.Name}}, {{fieldSymbol.Type.Name}}>(nameof({{name}}));
+            """);
 
-        protected override void AddStaticFields(List<string> fields, IFieldSymbol fieldSymbol)
-        {
-            string name = GetName(fieldSymbol);
-            fields.Add($$"""
-                            public static readonly StyledProperty<{{fieldSymbol.Type.Name}}> {{name}}Property =
-                                AvaloniaProperty.Register<{{fieldSymbol.ContainingType.Name}}, {{fieldSymbol.Type.Name}}>(nameof({{name}}));
-                """);
-        }
+        context.Properties.Add($$"""
+                        public {{type}} {{name}}
+                        {
+                            get { return GetValue({{name}}Property); }
+                            set { SetValue({{name}}Property, value); }
+                        }
+            """);
+    }
 
-        protected override void AddProperties(List<string> properties, IFieldSymbol fieldSymbol)
-        {
-            string type = GetReturnedType(fieldSymbol);
-            string name = GetName(fieldSymbol);
-            properties.Add($$"""
-                            public {{type}} {{name}}
-                            {
-                                get { return GetValue({{name}}Property); }
-                                set { SetValue({{name}}Property, value); }
-                            }
-                """);
-        }
+    string GetName(IFieldSymbol fieldSymbol)
+    {
+        return $$"""
+        {{fieldSymbol.Name.Substring(0, 1).ToUpper()}}{{fieldSymbol.Name.Substring(1)}}
+        """;
     }
 }

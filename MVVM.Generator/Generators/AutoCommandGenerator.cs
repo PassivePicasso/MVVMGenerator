@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Linq;
+﻿using System.Linq;
 
 using Microsoft.CodeAnalysis;
 
@@ -67,42 +66,33 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
         return true;
     }
 
-    protected override void AddUsings(List<string> usings, IMethodSymbol symbol)
+    protected override void Execute(ClassGenerationContext context, IMethodSymbol symbol)
     {
         LogManager.Log($"{LogPrefix}Adding usings for {symbol.Name}");
-        usings.Add("using System.Windows.Input;");
+        context.Usings.Add("using System.Windows.Input;");
         if (symbol.Parameters.Length > 0)
         {
-            NamespaceExtractor.AddNamespaceUsings(usings, symbol.Parameters[0].Type);
+            NamespaceExtractor.AddNamespaceUsings(context.Usings, symbol.Parameters[0].Type);
         }
         if (IsAsyncCommand(symbol))
         {
-            usings.Add("using System.Threading.Tasks;");
+            context.Usings.Add("using System.Threading.Tasks;");
         }
-    }
 
-    protected override void AddNestedClasses(List<string> definitions, IMethodSymbol symbol)
-    {
         LogManager.Log($"{LogPrefix}Generating command class for {symbol.Name}");
         if (IsOverrideWithAutoCommand(symbol)) return;
 
         var className = GetCommandClassName(symbol);
         var canExecuteMethodName = GetCanExecuteMethodName(symbol);
 
-        _commandClassGenerator.AddCommandClass(definitions, symbol, className, canExecuteMethodName);
-    }
-
-    protected override void AddFields(List<string> definitions, IMethodSymbol symbol)
-        => definitions.Add($$"""
+        _commandClassGenerator.AddCommandClass(context.NestedClasses, symbol, className, canExecuteMethodName);
+        context.Fields.Add($$"""
 
         private ICommand? {{GetFieldName(symbol)}};
 """);
 
-    protected override void AddProperties(List<string> definitions, IMethodSymbol symbol)
-    {
-        var className = GetCommandClassName(symbol);
         var fieldName = GetFieldName(symbol);
-        definitions.Add($$"""
+        context.Properties.Add($$"""
 
         public ICommand {{symbol.Name}}Command => {{fieldName}} ??= new {{className}}({{(symbol.IsStatic ? string.Empty : "this")}});
 """);
