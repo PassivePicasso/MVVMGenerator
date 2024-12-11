@@ -48,6 +48,7 @@ namespace TestProject
         //}
 
         [AutoCommand]
+        [AddAttribute(typeof(JsonIgnoreAttribute), [])]
         public void Test(int input)
         {
         }

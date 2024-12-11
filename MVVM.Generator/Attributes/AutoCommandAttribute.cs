@@ -1,6 +1,7 @@
 ﻿using System;
 
 namespace MVVM.Generator.Attributes;
+
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
 public class AutoCommandAttribute : Attribute
 {

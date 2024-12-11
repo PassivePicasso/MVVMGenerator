@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 
 using Microsoft.CodeAnalysis;
 
@@ -82,26 +83,28 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
         LogManager.Log($"{LogPrefix}Generating command class for {symbol.Name}");
         if (IsOverrideWithAutoCommand(symbol)) return;
 
-        var className = GetCommandClassName(symbol);
+        var fieldName = $"{symbol.Name.Substring(0, 1).ToLower()}{symbol.Name.Substring(1)}Command";
+        var className = $"{symbol.Name}CommandClass";
         var canExecuteMethodName = GetCanExecuteMethodName(symbol);
 
         _commandClassGenerator.AddCommandClass(context.NestedClasses, symbol, className, canExecuteMethodName);
         context.Fields.Add($$"""
 
-        private ICommand? {{GetFieldName(symbol)}};
+        private ICommand? {{fieldName}};
 """);
 
-        var fieldName = GetFieldName(symbol);
-        context.Properties.Add($$"""
-
+        var property = $$"""
         public ICommand {{symbol.Name}}Command => {{fieldName}} ??= new {{className}}({{(symbol.IsStatic ? string.Empty : "this")}});
-""");
+""";
+
+        foreach(var attribute in GetAdditionalAttributes(context, symbol))
+        {
+            property = $@"{attribute}
+{property}";
+        }
+
+        context.Properties.Add(property);
     }
-
-    private string GetCommandClassName(IMethodSymbol symbol) => $"{symbol.Name}CommandClass";
-
-    private string GetFieldName(IMethodSymbol symbol)
-        => $"{symbol.Name.Substring(0, 1).ToLower()}{symbol.Name.Substring(1)}Command";
 
     private string GetCanExecuteMethodName(IMethodSymbol methodSymbol)
     {
@@ -189,5 +192,37 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
     {
         return method.ReturnType.Name == "Task" &&
                method.ReturnType.ContainingNamespace?.ToString() == "System.Threading.Tasks";
+    }
+
+    private IEnumerable<string> GetAdditionalAttributes(ClassGenerationContext context, IMethodSymbol methodSymbol)
+    {
+        var additionalAttributes = methodSymbol.GetAttributes()
+            .Where(ad => ad.AttributeClass?.Name == nameof(AddAttributeAttribute))
+            .Select(ad =>
+            {
+                var attributeType = ad.ConstructorArguments[0].Value as INamedTypeSymbol;
+                var args = ad.ConstructorArguments[1].Values.Select(v => v.Value).Where(v => v != null).ToArray();
+
+                if (attributeType != null)
+                {
+                    var namespaceName = attributeType.ContainingNamespace.ToDisplayString();
+                    context.Usings.Add($"using {namespaceName};");
+                    string name = attributeType.Name;
+                    name = name.Substring(0, name.Length - "Attribute".Length);
+                    var decorator = $"{name}";
+                    if (args.Length > 0)
+                        decorator += $"({string.Join(", ", args.Select(a => a is string ? $"\"{a}\"" : a.ToString()))})";
+
+                    return $"""
+        [{decorator}]
+""";
+                }
+
+                return string.Empty;
+            })
+            .Where(attr => !string.IsNullOrEmpty(attr))
+            .ToArray();
+
+        return additionalAttributes;
     }
 }
