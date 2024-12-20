@@ -12,7 +12,7 @@ using Newtonsoft.Json;
 
 namespace TestProject
 {
-    public partial class TestViewModel
+    public partial class Test
     {
         [AutoNotify]
         private OtherType.TestEnum[]? testEnumValues;
@@ -49,7 +49,7 @@ namespace TestProject
 
         [AutoCommand]
         [AddAttribute(typeof(JsonIgnoreAttribute), [])]
-        public void Test(int input)
+        public void TestMethod(int input)
         {
         }
 

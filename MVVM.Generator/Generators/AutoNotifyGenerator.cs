@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 
@@ -95,6 +96,37 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         context.Usings.Add("using System.Runtime.CompilerServices;");
         NamespaceExtractor.AddNamespaceUsings(context.Usings, fieldSymbol.Type);
 
+        // Check if base type has or will have INPC implementation
+        var containingType = fieldSymbol.ContainingType;
+        var baseImplementsINPC = false;
+        var baseType = containingType.BaseType;
+        string path = containingType.Name;
+
+        while (baseType != null)
+        {
+            // Check for explicit INPC implementation
+            var hasInterface = baseType.Interfaces.Any(i => i.Name == nameof(INotifyPropertyChanged));
+
+            // Check if base type would have INPC generated
+            var hasAutoNotifyFields = baseType.GetMembers()
+                .OfType<IFieldSymbol>()
+                .Any(f => f.GetAttributes()
+                    .Any(a => a.AttributeClass?.Name == nameof(AutoNotifyAttribute)));
+
+            if (hasInterface || hasAutoNotifyFields)
+            {
+                path += $" -> ({baseType.Name} : {(hasInterface ? "explicit INPC" : "generated INPC")})";
+                baseImplementsINPC = true;
+                break;
+            }
+
+            path += $" -> {baseType.Name}";
+            baseType = baseType.BaseType;
+        }
+
+        LogManager.Log($"{LogPrefix}{(baseImplementsINPC ? "INPC implementation found" : "No INPC implementation")} in type hierarchy: {path}");
+
+
         foreach (var fieldAttribute in fieldSymbol.GetAttributes())
         {
             if (fieldAttribute?.AttributeClass?.Name == AttrTypeName) continue;
@@ -129,6 +161,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
         LogManager.Log($"{LogPrefix}Generating properties for {fieldSymbol.Name}");
         _propertyGenerator.AddProperties(context.Properties, fieldSymbol, _cachedDependencies);
 
+        if (baseImplementsINPC) return;
 
         if (!context.Interfaces.Contains("INotifyPropertyChanged"))
             context.Interfaces.Add("INotifyPropertyChanged");
@@ -139,7 +172,7 @@ internal class AutoNotifyGenerator : AttributeGeneratorHandler<IFieldSymbol, Aut
             context.InterfaceImplementations.Add($$"""
 
         public event PropertyChangedEventHandler? PropertyChanged;
-        void OnPropertyChanged([CallerMemberName] string? propertyName = null) 
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null) 
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
