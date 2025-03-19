@@ -25,13 +25,18 @@ namespace MVVM.Generator.Utilities
             { SpecialType.System_Object, "object" },
             { SpecialType.System_String, "string" },
             { SpecialType.System_Void, "void" },
-            // nint and nuint are not part of SpecialType enum, handle separately if needed
         };
 
         public static string GetTypeName(ITypeSymbol typeSymbol)
         {
+            // Handle special case for Nullable<T>
             var type = typeSymbol.Name;
-            if (typeSymbol is INamedTypeSymbol namedTypeSymbol)
+            if (typeSymbol is INamedTypeSymbol namedType && namedType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            {
+                var elementType = namedType.TypeArguments[0];
+                type = $"{GetTypeName(elementType)}?";
+            }
+            else if (typeSymbol is INamedTypeSymbol namedTypeSymbol)
             {
                 if (SpecialNames.TryGetValue(namedTypeSymbol.SpecialType, out var specialName))
                 {
@@ -40,18 +45,14 @@ namespace MVVM.Generator.Utilities
                 else
                 {
                     var typeName = namedTypeSymbol.Name;
-                    if (namedTypeSymbol.IsGenericType)
+                    if (namedTypeSymbol.IsGenericType && !namedTypeSymbol.IsNullableType())
                     {
                         var typeArguments = namedTypeSymbol.TypeArguments;
                         var typeArgumentNames = typeArguments.Select(arg => GetTypeName(arg)).ToArray();
                         typeName = $"{typeName}<{string.Join(", ", typeArgumentNames)}>";
-                    } 
-
+                    }
                     type = typeName;
                 }
-
-                if (typeSymbol.NullableAnnotation.HasFlag(NullableAnnotation.Annotated))
-                    type = $"{type}?";
             }
             else if (typeSymbol.TypeKind == TypeKind.Array)
             {
@@ -59,8 +60,24 @@ namespace MVVM.Generator.Utilities
                 var elementType = GetTypeName(arrayTypeSymbol.ElementType);
                 type = $"{elementType}[]";
             }
+            else
+            {
+                type = typeSymbol.Name;
+            }
+
+            // Only add nullable annotation if it's not already a Nullable<T>
+            if (!(typeSymbol is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T })
+                && typeSymbol.NullableAnnotation == NullableAnnotation.Annotated)
+            {
+                type = $"{type}?";
+            }
 
             return type;
+        }
+
+        private static bool IsNullableType(this INamedTypeSymbol type)
+        {
+            return type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
         }
     }
 }
