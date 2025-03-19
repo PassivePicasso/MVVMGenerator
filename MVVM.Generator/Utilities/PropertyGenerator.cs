@@ -105,11 +105,13 @@ public class PropertyGenerator
                 {
                     (({{INCCName}}){{fieldName}}).CollectionChanged -= {{handlerFieldName}};
                 }
+
 """;
                                 suffix = $$"""
+
                 if ({{fieldName}} != null && {{handlerFieldName}} != null)
                 {
-                    {{handlerFieldName}} = {{methodName}};
+                    {{handlerFieldName}} ??= {{methodName}};
                     (({{INCCName}}){{fieldName}}).CollectionChanged += {{handlerFieldName}};
                 }
 """;
