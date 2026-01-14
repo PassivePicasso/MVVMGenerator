@@ -14,7 +14,7 @@
 	</PropertyGroup>
 	<PropertyGroup>
 		<PackageId>MVVM.Generator</PackageId>
-		<Version>4.7.7</Version>
+		<Version>4.7.12</Version>
 		<PackageProjectUrl>https://github.com/PassivePicasso/MVVMGenerator</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<Title>MVVM.Generator</Title>
@@ -22,7 +22,7 @@
 		<Authors>James LaPenn</Authors>
 		<Description>Simple MVVM Generators for WPF</Description>
 		<Copyright>James LaPenn 2024</Copyright>
-		<PackageOutputPath>$(OutputPath)</PackageOutputPath>
+		<PackageOutputPath>..\..\NuGetFeed</PackageOutputPath>
 	</PropertyGroup>
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
 	  <DebugType>full</DebugType>

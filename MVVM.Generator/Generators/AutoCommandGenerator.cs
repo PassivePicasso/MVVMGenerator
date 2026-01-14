@@ -53,14 +53,31 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
             return false;
         }
 
-        var canExecuteMethod = GetCanExecuteMethod(methodSymbol);
-        if (canExecuteMethod != null)
+        var (canExecuteMember, isProperty) = GetCanExecuteMember(methodSymbol);
+        if (canExecuteMember != null)
         {
-            LogManager.Log($"{LogPrefix}Validating CanExecute method for {methodSymbol.Name}");
-            if (!ValidateCanExecuteMethod(methodSymbol, canExecuteMethod))
+            LogManager.Log($"{LogPrefix}Validating CanExecute {(isProperty ? "property" : "method")} for {methodSymbol.Name}");
+            if (isProperty)
             {
-                return false;
+                if (!ValidateCanExecuteProperty(methodSymbol, (IPropertySymbol)canExecuteMember))
+                    return false;
             }
+            else
+            {
+                if (!ValidateCanExecuteMethod(methodSymbol, (IMethodSymbol)canExecuteMember))
+                    return false;
+            }
+        }
+        else if (!string.IsNullOrEmpty(GetCanExecuteMethodName(methodSymbol)))
+        {
+            // CanExecute name was specified but not found as either method or property
+            LogManager.LogError($"{LogPrefix}CanExecute member not found for {methodSymbol.Name}");
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature,
+                methodSymbol.Locations.FirstOrDefault(),
+                GetCanExecuteMethodName(methodSymbol),
+                "Member not found. Expected a method or property with this name."));
+            return false;
         }
 
         LogManager.Log($"{LogPrefix}Successfully validated {methodSymbol.Name}");
@@ -85,9 +102,22 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
 
         var fieldName = $"{symbol.Name.Substring(0, 1).ToLower()}{symbol.Name.Substring(1)}Command";
         var className = $"{symbol.Name}CommandClass";
-        var canExecuteMethodName = GetCanExecuteMethodName(symbol);
+        var canExecuteName = GetCanExecuteMethodName(symbol);
+        var (canExecuteMember, isProperty) = GetCanExecuteMember(symbol);
 
-        _commandClassGenerator.AddCommandClass(context.NestedClasses, symbol, className, canExecuteMethodName);
+        // Extract dependencies from CanExecute member for automatic CanExecuteChanged
+        IReadOnlyList<string>? dependencies = null;
+        if (canExecuteMember != null)
+        {
+            dependencies = DependencyAnalyzer.GetDependencies(canExecuteMember, null);
+            if (dependencies.Count > 0)
+            {
+                context.Usings.Add("using System.ComponentModel;");
+                LogManager.Log($"{LogPrefix}Found {dependencies.Count} dependencies for {symbol.Name}: {string.Join(", ", dependencies)}");
+            }
+        }
+
+        _commandClassGenerator.AddCommandClass(context.NestedClasses, symbol, className, canExecuteName, isProperty, dependencies);
         context.Fields.Add($$"""
 
         private ICommand? {{fieldName}};
@@ -130,6 +160,33 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
             .FirstOrDefault(m => m.Name == canExecuteMethodName);
     }
 
+    private IPropertySymbol? GetCanExecuteProperty(IMethodSymbol methodSymbol)
+    {
+        var canExecuteName = GetCanExecuteMethodName(methodSymbol);
+        if (string.IsNullOrEmpty(canExecuteName)) return null;
+
+        return methodSymbol.ContainingType.GetMembers()
+            .OfType<IPropertySymbol>()
+            .FirstOrDefault(p => p.Name == canExecuteName);
+    }
+
+    private (ISymbol? symbol, bool isProperty) GetCanExecuteMember(IMethodSymbol methodSymbol)
+    {
+        // For parameterized commands, CanExecute must be a method
+        if (methodSymbol.Parameters.Length > 0)
+        {
+            return (GetCanExecuteMethod(methodSymbol), false);
+        }
+
+        // For parameterless commands, prefer property over method for better MVVM binding
+        var property = GetCanExecuteProperty(methodSymbol);
+        if (property != null)
+            return (property, true);
+
+        var method = GetCanExecuteMethod(methodSymbol);
+        return (method, false);
+    }
+
     private bool ValidateCanExecuteMethod(IMethodSymbol commandMethod, IMethodSymbol canExecuteMethod)
     {
         LogManager.Log($"{LogPrefix}Validating CanExecute method {canExecuteMethod.Name}");
@@ -168,6 +225,37 @@ internal class AutoCommandGenerator : AttributeGeneratorHandler<IMethodSymbol, A
                     $"Parameter type mismatch at position {i}. Expected {commandMethod.Parameters[i].Type}, found {canExecuteMethod.Parameters[i].Type}."));
                 return false;
             }
+        }
+
+        return true;
+    }
+
+    private bool ValidateCanExecuteProperty(IMethodSymbol commandMethod, IPropertySymbol canExecuteProperty)
+    {
+        LogManager.Log($"{LogPrefix}Validating CanExecute property {canExecuteProperty.Name}");
+
+        // Property must return bool
+        if (canExecuteProperty.Type.SpecialType != SpecialType.System_Boolean)
+        {
+            LogManager.LogError($"{LogPrefix}Invalid return type for CanExecute property {canExecuteProperty.Name}: {canExecuteProperty.Type}");
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature,
+                canExecuteProperty.Locations.FirstOrDefault(),
+                canExecuteProperty.Name,
+                $"Property type must be bool, found {canExecuteProperty.Type}."));
+            return false;
+        }
+
+        // Property can only be used with parameterless commands
+        if (commandMethod.Parameters.Length > 0)
+        {
+            LogManager.LogError($"{LogPrefix}Property CanExecute cannot be used with parameterized commands");
+            Context.ReportDiagnostic(Diagnostic.Create(
+                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature,
+                canExecuteProperty.Locations.FirstOrDefault(),
+                canExecuteProperty.Name,
+                $"Properties cannot be used as CanExecute for commands with parameters. Use a method instead."));
+            return false;
         }
 
         return true;

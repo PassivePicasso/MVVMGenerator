@@ -69,18 +69,29 @@ public class PropertyGenerator
 
                                 ValidateEventHandler(methodName, containingType, matchedMethodSymbol);
 
-                                string handlerFieldName = $"_{fieldName}ChangedHandler";
-                                defines = $$"""
+                                // For parameterless handlers, call directly; for (object, EventArgs) handlers, use delegate
+                                if (matchedMethodSymbol!.Parameters.Length == 0)
+                                {
+                                    suffix = $$"""
+
+                {{methodName}}();
+""";
+                                }
+                                else
+                                {
+                                    string handlerFieldName = $"_{fieldName}ChangedHandler";
+                                    defines = $$"""
 
         private EventHandler {{handlerFieldName}};
 """;
 
-                                suffix = $$"""
+                                    suffix = $$"""
 
                 if ({{handlerFieldName}} == null)
                     {{handlerFieldName}} = {{methodName}};
                 {{handlerFieldName}}.Invoke(this, EventArgs.Empty);
 """;
+                                }
                             }
                             break;
                         case nameof(AutoNotifyAttribute.CollectionChangedHandlerName):
@@ -228,8 +239,12 @@ public class PropertyGenerator
         if (matchedMethodSymbol.ReturnType.SpecialType != SpecialType.System_Void)
             throw new InvalidOperationException($"Method '{methodName}' does not return void.");
 
+        // Allow parameterless handlers OR handlers with (object sender, EventArgs e)
+        if (matchedMethodSymbol.Parameters.Length == 0)
+            return; // Parameterless handler is valid
+
         if (matchedMethodSymbol.Parameters.Length != 2)
-            throw new InvalidOperationException($"Method '{methodName}' does not have the correct number of parameters.");
+            throw new InvalidOperationException($"Method '{methodName}' must be parameterless or take (object sender, EventArgs e) parameters.");
 
         var firstParameter = matchedMethodSymbol.Parameters[0];
         var secondParameter = matchedMethodSymbol.Parameters[1];

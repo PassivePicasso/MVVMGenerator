@@ -125,7 +125,7 @@ public class AutoNotifyAnalyzer : DiagnosticAnalyzer
                 fieldDeclaration.GetLocation(),
                 handlerName,
                 fieldSymbol.Name,
-                "Handler must be a void method taking object sender and EventArgs e parameters"));
+                "Handler must be a parameterless void method or take (object sender, EventArgs e) parameters"));
         }
     }
 
@@ -174,7 +174,15 @@ public class AutoNotifyAnalyzer : DiagnosticAnalyzer
             .OfType<IMethodSymbol>()
             .FirstOrDefault(m => m.Name == methodName);
 
-        return IsValidHandlerSignature<EventArgs>(methodSymbol);
+        // PropertyChangedHandler can be parameterless or take (object sender, EventArgs e)
+        return IsParameterlessVoidMethod(methodSymbol) || IsValidHandlerSignature<EventArgs>(methodSymbol);
+    }
+
+    private static bool IsParameterlessVoidMethod(IMethodSymbol? methodSymbol)
+    {
+        return methodSymbol != null &&
+               methodSymbol.ReturnType.SpecialType == SpecialType.System_Void &&
+               methodSymbol.Parameters.Length == 0;
     }
 
     private static bool IsValidCollectionChangedHandler(string methodName, INamedTypeSymbol containingType)
