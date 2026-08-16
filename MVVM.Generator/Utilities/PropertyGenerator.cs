@@ -39,6 +39,8 @@ public class PropertyGenerator
             var attributeData = fieldSymbol.GetAttributes()
                 .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoNotifyAttribute));
 
+            var propertyChangedSuffix = string.Empty;
+            var collectionChangedSuffix = string.Empty;
             if (attributeData != null && attributeData.NamedArguments.Length > 0)
             {
                 foreach (var namedArg in attributeData.NamedArguments)
@@ -69,10 +71,11 @@ public class PropertyGenerator
 
                                 ValidateEventHandler(methodName, containingType, matchedMethodSymbol);
 
-                                // For parameterless handlers, call directly; for (object, EventArgs) handlers, use delegate
+                                // Parameterless handlers are called directly; (object, EventArgs)
+                                // handlers are invoked through a cached delegate field.
                                 if (matchedMethodSymbol!.Parameters.Length == 0)
                                 {
-                                    suffix = $$"""
+                                    propertyChangedSuffix = $$"""
 
                 {{methodName}}();
 """;
@@ -80,12 +83,12 @@ public class PropertyGenerator
                                 else
                                 {
                                     string handlerFieldName = $"_{fieldName}ChangedHandler";
-                                    defines = $$"""
+                                    defines += $$"""
 
         private EventHandler {{handlerFieldName}};
 """;
 
-                                    suffix = $$"""
+                                    propertyChangedSuffix = $$"""
 
                 if ({{handlerFieldName}} == null)
                     {{handlerFieldName}} = {{methodName}};
@@ -107,9 +110,10 @@ public class PropertyGenerator
                                 ValidateCollectionChangedHandler(methodName, containingType, matchedMethodSymbol);
 
                                 string handlerFieldName = $"_{fieldName}CollectionChangedHandler";
-                                defines = $"""
-                                    private NotifyCollectionChangedEventHandler {handlerFieldName};
-                            """;
+                                defines += $"""
+
+        private NotifyCollectionChangedEventHandler {handlerFieldName};
+""";
                                 prefix = $$"""
 
                 if ({{fieldName}} != null && {{handlerFieldName}} != null)
@@ -118,9 +122,9 @@ public class PropertyGenerator
                 }
 
 """;
-                                suffix = $$"""
+                                collectionChangedSuffix = $$"""
 
-                if ({{fieldName}} != null && {{handlerFieldName}} != null)
+                if ({{fieldName}} != null)
                 {
                     {{handlerFieldName}} ??= {{methodName}};
                     (({{INCCName}}){{fieldName}}).CollectionChanged += {{handlerFieldName}};
@@ -131,6 +135,9 @@ public class PropertyGenerator
                     }
                 }
             }
+
+            // Combine handler suffixes: collection changed subscription first, then property changed invocation
+            suffix = collectionChangedSuffix + propertyChangedSuffix;
 
             // Handle DependsOnAttribute - Look up by property name
             var dependsSuffix = string.Empty;

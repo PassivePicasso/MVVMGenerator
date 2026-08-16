@@ -38,6 +38,11 @@ namespace TestProject
         private ObservableCollection<string> collection = new ObservableCollection<string>();
         public void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args) { }
 
+        [AutoNotify(PropertyChangedHandlerName = nameof(OnChildContainersChanged), CollectionChangedHandlerName = nameof(OnChildContainersCollectionChanged))]
+        private ObservableCollection<string> childContainers = new ObservableCollection<string>();
+        private void OnChildContainersChanged(object? sender, EventArgs args) { }
+        private void OnChildContainersCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args) { }
+
         [AutoCommand(nameof(CanExecuteClose))]
         public void Close() => IsOpen = false;
         public bool CanExecuteClose() => IsOpen;
