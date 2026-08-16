@@ -145,6 +145,15 @@ public static class Descriptors
                 category: Category,
                 defaultSeverity: DiagnosticSeverity.Error,
                 isEnabledByDefault: true);
+
+            public static readonly DiagnosticDescriptor UnreferencedCanExecute = new(
+                id: "MAACA005",
+                title: "CanExecute member is not referenced",
+                messageFormat: "'{0}' matches the CanExecute naming convention for command '{1}' but is not referenced, so the command is always executable",
+                category: Category,
+                defaultSeverity: DiagnosticSeverity.Warning,
+                isEnabledByDefault: true,
+                description: "Pass the member name to the AutoCommand attribute to wire it up.");
         }
     }
 }

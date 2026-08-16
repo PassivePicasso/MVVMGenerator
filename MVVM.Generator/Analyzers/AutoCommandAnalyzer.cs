@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 using MVVM.Generator.Attributes;
+using MVVM.Generator.Extraction;
 using MVVM.Generator.Generators;
 
 namespace MVVM.Generator.Analyzers;
@@ -21,6 +22,7 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
             AutoCommand.TooManyParameters,
             AutoCommand.InvalidCanExecute,
             AutoCommand.NamingConflict,
+            AutoCommand.UnreferencedCanExecute,
         ];
 
     public override void Initialize(AnalysisContext context)
@@ -81,54 +83,60 @@ public class AutoCommandAnalyzer : DiagnosticAnalyzer
         return true;
     }
 
+    /// <summary>
+    /// Resolution goes through CanExecuteResolver so this agrees with the
+    /// generator, which accepts a property for a parameterless command.
+    /// </summary>
     private static void ValidateCanExecuteMethod(SyntaxNodeAnalysisContext context, MethodDeclarationSyntax methodDeclaration, IMethodSymbol methodSymbol)
     {
-        var attributeData = methodSymbol.GetAttributes()
-            .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoCommandAttribute));
+        var canExecuteName = CanExecuteResolver.SuppliedName(methodSymbol);
 
-        if (attributeData?.ConstructorArguments.Length > 0)
+        if (string.IsNullOrEmpty(canExecuteName))
         {
-            var canExecuteMethodName = attributeData.ConstructorArguments[0].Value as string;
-            if (!string.IsNullOrEmpty(canExecuteMethodName))
-            {
-                ValidateCanExecuteMethodSignature(context, methodDeclaration, methodSymbol, canExecuteMethodName!);
-            }
+            ValidateConventionMemberIsReferenced(context, methodDeclaration, methodSymbol);
+            return;
         }
+
+        var resolution = CanExecuteResolver.Resolve(methodSymbol, canExecuteName);
+        if (resolution.IsValid) return;
+
+        ReportCanExecuteError(context, methodDeclaration, methodSymbol, canExecuteName, resolution.Failure switch
+        {
+            CanExecuteFailure.MemberNotFound => "Member not found",
+            CanExecuteFailure.NotBoolean => "Must return bool",
+            CanExecuteFailure.ParameterCountMismatch => "Parameter count mismatch",
+            _ => $"Parameter {resolution.ParameterIndex + 1} type mismatch",
+        });
     }
 
-    private static void ValidateCanExecuteMethodSignature(SyntaxNodeAnalysisContext context, MethodDeclarationSyntax methodDeclaration, IMethodSymbol methodSymbol, string canExecuteMethodName)
+    /// <summary>
+    /// Warns when a member named Can{Command} exists and would bind, but the
+    /// attribute never references it, leaving the command always executable.
+    /// </summary>
+    private static void ValidateConventionMemberIsReferenced(SyntaxNodeAnalysisContext context, MethodDeclarationSyntax methodDeclaration, IMethodSymbol methodSymbol)
     {
-        var containingType = methodSymbol.ContainingType;
-        var canExecuteMethod = containingType.GetMembers()
-            .OfType<IMethodSymbol>()
-            .FirstOrDefault(m => m.Name == canExecuteMethodName);
+        // An override of a command generates nothing, so there is nothing to wire.
+        if (IsOverrideOfCommand(methodSymbol)) return;
 
-        if (canExecuteMethod == null)
-        {
-            ReportCanExecuteError(context, methodDeclaration, methodSymbol, canExecuteMethodName, "Method not found");
-            return;
-        }
+        var conventionName = CanExecuteResolver.ConventionName(methodSymbol);
+        var resolution = CanExecuteResolver.Resolve(methodSymbol, conventionName);
 
-        if (canExecuteMethod.ReturnType.SpecialType != SpecialType.System_Boolean)
-        {
-            ReportCanExecuteError(context, methodDeclaration, methodSymbol, canExecuteMethodName, "Must return bool");
-            return;
-        }
+        if (!resolution.IsValid) return;
+        if (!CanExecuteResolver.IsStaticCompatible(methodSymbol, resolution.Member!)) return;
 
-        if (canExecuteMethod.Parameters.Length != methodSymbol.Parameters.Length)
-        {
-            ReportCanExecuteError(context, methodDeclaration, methodSymbol, canExecuteMethodName, "Parameter count mismatch");
-            return;
-        }
+        context.ReportDiagnostic(Diagnostic.Create(
+            AutoCommand.UnreferencedCanExecute,
+            methodDeclaration.Identifier.GetLocation(),
+            conventionName,
+            methodSymbol.Name));
+    }
 
-        for (int i = 0; i < canExecuteMethod.Parameters.Length; i++)
-        {
-            if (!SymbolEqualityComparer.Default.Equals(canExecuteMethod.Parameters[i].Type, methodSymbol.Parameters[i].Type))
-            {
-                ReportCanExecuteError(context, methodDeclaration, methodSymbol, canExecuteMethodName, $"Parameter {i + 1} type mismatch");
-                return;
-            }
-        }
+    private static bool IsOverrideOfCommand(IMethodSymbol methodSymbol)
+    {
+        if (!methodSymbol.IsOverride) return false;
+
+        return methodSymbol.OverriddenMethod?.GetAttributes()
+            .Any(attr => attr.AttributeClass?.Name == nameof(AutoCommandAttribute)) ?? false;
     }
 
     private static void ReportCanExecuteError(SyntaxNodeAnalysisContext context, MethodDeclarationSyntax methodDeclaration, IMethodSymbol methodSymbol, string canExecuteMethodName, string error)

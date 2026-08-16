@@ -11,8 +11,8 @@ using MVVM.Generator.Utilities;
 namespace MVVM.Generator.Extraction;
 
 /// <summary>
-/// Validates and models [AutoCommand] methods. Validation order and messages
-/// match the previous symbol-based handler.
+/// Validates and models [AutoCommand] methods. CanExecute members are resolved
+/// through CanExecuteResolver so the generator and analyzer agree.
 /// </summary>
 internal static class CommandExtractor
 {
@@ -27,8 +27,8 @@ internal static class CommandExtractor
         if (isAsync)
             usings.Add("using System.Threading.Tasks;");
 
-        var canExecuteName = CanExecuteName(methodSymbol);
-        var (canExecuteMember, isProperty) = CanExecuteMember(methodSymbol);
+        var canExecuteName = CanExecuteResolver.SuppliedName(methodSymbol);
+        var (canExecuteMember, isProperty) = CanExecuteResolver.Find(methodSymbol, canExecuteName);
 
         var dependencies = canExecuteMember != null
             ? DependencyAnalyzer.GetDependencies(canExecuteMember, null)
@@ -86,130 +86,57 @@ internal static class CommandExtractor
             return false;
         }
 
-        var (canExecuteMember, isProperty) = CanExecuteMember(methodSymbol);
-        if (canExecuteMember != null)
-        {
-            return isProperty
-                ? ValidateCanExecuteProperty(methodSymbol, (IPropertySymbol)canExecuteMember, diagnostics)
-                : ValidateCanExecuteMethod(methodSymbol, (IMethodSymbol)canExecuteMember, diagnostics);
-        }
+        var canExecuteName = CanExecuteResolver.SuppliedName(methodSymbol);
+        if (string.IsNullOrEmpty(canExecuteName)) return true;
 
-        if (!string.IsNullOrEmpty(CanExecuteName(methodSymbol)))
+        return ValidateCanExecute(methodSymbol, canExecuteName, diagnostics);
+    }
+
+    private static bool ValidateCanExecute(
+        IMethodSymbol methodSymbol, string canExecuteName, List<DiagnosticInfo> diagnostics)
+    {
+        var resolution = CanExecuteResolver.Resolve(methodSymbol, canExecuteName);
+
+        if (resolution.IsValid) return true;
+
+        if (resolution.Member == null)
         {
             diagnostics.Add(DiagnosticInfo.Create(
                 Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature, methodSymbol,
-                CanExecuteName(methodSymbol),
+                canExecuteName,
                 "Member not found. Expected a method or property with this name."));
             return false;
         }
 
-        return true;
+        diagnostics.Add(DiagnosticInfo.Create(
+            Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature,
+            resolution.Member,
+            resolution.Member.Name,
+            DescribeFailure(methodSymbol, resolution)));
+        return false;
     }
 
-    private static bool ValidateCanExecuteMethod(
-        IMethodSymbol commandMethod, IMethodSymbol canExecuteMethod, List<DiagnosticInfo> diagnostics)
+    private static string DescribeFailure(IMethodSymbol command, CanExecuteResolution resolution)
     {
-        if (canExecuteMethod.ReturnType.SpecialType != SpecialType.System_Boolean)
+        if (resolution.IsProperty)
         {
-            diagnostics.Add(DiagnosticInfo.Create(
-                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature, canExecuteMethod,
-                canExecuteMethod.Name,
-                $"Return type must be bool, found {canExecuteMethod.ReturnType}."));
-            return false;
+            var property = (IPropertySymbol)resolution.Member!;
+            return $"Property type must be bool, found {property.Type}.";
         }
 
-        if (canExecuteMethod.Parameters.Length != commandMethod.Parameters.Length)
+        var method = (IMethodSymbol)resolution.Member!;
+
+        return resolution.Failure switch
         {
-            diagnostics.Add(DiagnosticInfo.Create(
-                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature, canExecuteMethod,
-                canExecuteMethod.Name,
-                $"Parameter count mismatch. Expected {commandMethod.Parameters.Length}, found {canExecuteMethod.Parameters.Length}."));
-            return false;
-        }
-
-        for (var i = 0; i < commandMethod.Parameters.Length; i++)
-        {
-            if (SymbolEqualityComparer.Default.Equals(
-                    commandMethod.Parameters[i].Type, canExecuteMethod.Parameters[i].Type))
-                continue;
-
-            diagnostics.Add(DiagnosticInfo.Create(
-                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature, canExecuteMethod,
-                canExecuteMethod.Name,
-                $"Parameter type mismatch at position {i}. Expected {commandMethod.Parameters[i].Type}, found {canExecuteMethod.Parameters[i].Type}."));
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool ValidateCanExecuteProperty(
-        IMethodSymbol commandMethod, IPropertySymbol canExecuteProperty, List<DiagnosticInfo> diagnostics)
-    {
-        if (canExecuteProperty.Type.SpecialType != SpecialType.System_Boolean)
-        {
-            diagnostics.Add(DiagnosticInfo.Create(
-                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature, canExecuteProperty,
-                canExecuteProperty.Name,
-                $"Property type must be bool, found {canExecuteProperty.Type}."));
-            return false;
-        }
-
-        if (commandMethod.Parameters.Length > 0)
-        {
-            diagnostics.Add(DiagnosticInfo.Create(
-                Descriptors.Generator.AutoCommand.InvalidCanExecuteSignature, canExecuteProperty,
-                canExecuteProperty.Name,
-                "Properties cannot be used as CanExecute for commands with parameters. Use a method instead."));
-            return false;
-        }
-
-        return true;
-    }
-
-    private static string CanExecuteName(IMethodSymbol methodSymbol)
-    {
-        var attributeData = methodSymbol.GetAttributes()
-            .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(AutoCommandAttribute));
-
-        if (attributeData?.ConstructorArguments.Length > 0
-            && attributeData.ConstructorArguments[0].Value is string canExecuteMethodName)
-        {
-            return canExecuteMethodName;
-        }
-
-        return string.Empty;
-    }
-
-    private static (ISymbol? Symbol, bool IsProperty) CanExecuteMember(IMethodSymbol methodSymbol)
-    {
-        if (methodSymbol.Parameters.Length > 0)
-            return (CanExecuteMethod(methodSymbol), false);
-
-        var property = CanExecuteProperty(methodSymbol);
-        if (property != null) return (property, true);
-
-        return (CanExecuteMethod(methodSymbol), false);
-    }
-
-    private static IMethodSymbol? CanExecuteMethod(IMethodSymbol methodSymbol)
-    {
-        var name = CanExecuteName(methodSymbol);
-        if (string.IsNullOrEmpty(name)) return null;
-
-        return methodSymbol.ContainingType.GetMembers()
-            .OfType<IMethodSymbol>()
-            .FirstOrDefault(m => m.Name == name);
-    }
-
-    private static IPropertySymbol? CanExecuteProperty(IMethodSymbol methodSymbol)
-    {
-        var name = CanExecuteName(methodSymbol);
-        if (string.IsNullOrEmpty(name)) return null;
-
-        return methodSymbol.ContainingType.GetMembers()
-            .OfType<IPropertySymbol>()
-            .FirstOrDefault(p => p.Name == name);
+            CanExecuteFailure.NotBoolean =>
+                $"Return type must be bool, found {method.ReturnType}.",
+            CanExecuteFailure.ParameterCountMismatch =>
+                $"Parameter count mismatch. Expected {command.Parameters.Length}, found {method.Parameters.Length}.",
+            _ =>
+                $"Parameter type mismatch at position {resolution.ParameterIndex}. "
+                + $"Expected {command.Parameters[resolution.ParameterIndex].Type}, "
+                + $"found {method.Parameters[resolution.ParameterIndex].Type}.",
+        };
     }
 
     private static List<string> AdditionalAttributes(List<string> usings, IMethodSymbol methodSymbol)
