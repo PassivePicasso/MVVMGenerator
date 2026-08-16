@@ -10,7 +10,8 @@ namespace MVVM.Generator.Utilities
         private const string LogPrefix = "NamespaceExtractor: ";
         public static void AddNamespaceUsings(List<string> usings, ITypeSymbol typeSymbol)
         {
-            LogManager.Log($"{LogPrefix}Extracting namespace for type {typeSymbol.Name}");
+            if (LogManager.IsEnabled)
+                LogManager.Log($"{LogPrefix}Extracting namespace for type {typeSymbol.Name}");
             try
             {
                 if (typeSymbol == null) return;
@@ -36,11 +37,13 @@ namespace MVVM.Generator.Utilities
                     // Handle array types
                     AddNamespaceUsings(usings, arrayTypeSymbol.ElementType);
                 }
-                LogManager.Log($"{LogPrefix}Added namespace {typeSymbol.ContainingNamespace}");
+                if (LogManager.IsEnabled)
+                    LogManager.Log($"{LogPrefix}Added namespace {typeSymbol.ContainingNamespace}");
             }
             catch (Exception ex)
             {
-                LogManager.LogError($"{LogPrefix}Failed to extract namespace for {typeSymbol.Name}", ex);
+                if (LogManager.IsEnabled)
+                    LogManager.LogError($"{LogPrefix}Failed to extract namespace for {typeSymbol.Name}", ex);
             }
         }
 

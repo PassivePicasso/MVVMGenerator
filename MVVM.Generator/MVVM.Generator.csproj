@@ -33,6 +33,7 @@
 	<ItemGroup>
 		<None Include="$(OutputPath)\$(AssemblyName).*" Pack="True" PackagePath="analyzers/dotnet/cs" Visible="false" />
 		<None Include="$(OutputPath)\$(AssemblyName).*" Pack="True" PackagePath="lib/netstandard2.0" Visible="false" />
+		<None Include="build\MVVM.Generator.props" Pack="True" PackagePath="build\;buildTransitive\" />
 	</ItemGroup>
 
 	<ItemGroup>

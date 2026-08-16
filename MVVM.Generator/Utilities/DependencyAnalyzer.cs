@@ -21,7 +21,8 @@ public static class DependencyAnalyzer
     /// </summary>
     public static IReadOnlyList<string> GetDependencies(ISymbol canExecuteSymbol, SemanticModel? semanticModel)
     {
-        LogManager.Log($"{LogPrefix}Analyzing dependencies for {canExecuteSymbol.Name}");
+        if (LogManager.IsEnabled)
+            LogManager.Log($"{LogPrefix}Analyzing dependencies for {canExecuteSymbol.Name}");
 
         var dependencies = new HashSet<string>();
         var containingType = canExecuteSymbol.ContainingType;
@@ -30,7 +31,8 @@ public static class DependencyAnalyzer
         var syntaxRef = canExecuteSymbol.DeclaringSyntaxReferences.FirstOrDefault();
         if (syntaxRef == null)
         {
-            LogManager.Log($"{LogPrefix}No syntax reference found for {canExecuteSymbol.Name}");
+            if (LogManager.IsEnabled)
+                LogManager.Log($"{LogPrefix}No syntax reference found for {canExecuteSymbol.Name}");
             return dependencies.ToList();
         }
 
@@ -51,7 +53,8 @@ public static class DependencyAnalyzer
                 if (containingType.GetMembers(propertyName).OfType<IPropertySymbol>().Any())
                 {
                     dependencies.Add(propertyName);
-                    LogManager.Log($"{LogPrefix}Found backing field dependency: {name} -> {propertyName}");
+                    if (LogManager.IsEnabled)
+                        LogManager.Log($"{LogPrefix}Found backing field dependency: {name} -> {propertyName}");
                 }
             }
 
@@ -60,11 +63,13 @@ public static class DependencyAnalyzer
             if (property != null)
             {
                 dependencies.Add(name);
-                LogManager.Log($"{LogPrefix}Found property dependency: {name}");
+                if (LogManager.IsEnabled)
+                    LogManager.Log($"{LogPrefix}Found property dependency: {name}");
             }
         }
 
-        LogManager.Log($"{LogPrefix}Total dependencies for {canExecuteSymbol.Name}: {dependencies.Count}");
+        if (LogManager.IsEnabled)
+            LogManager.Log($"{LogPrefix}Total dependencies for {canExecuteSymbol.Name}: {dependencies.Count}");
         return dependencies.ToList();
     }
 

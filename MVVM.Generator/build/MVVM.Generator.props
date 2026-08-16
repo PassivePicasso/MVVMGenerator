@@ -1,0 +1,12 @@
+﻿<Project>
+
+  <!--
+    Makes the opt-in logging properties visible to the generator. Logging stays
+    off unless MVVMGeneratorLogPath is set to a path whose directory exists.
+  -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="MVVMGeneratorLogPath" />
+    <CompilerVisibleProperty Include="MSBuildProjectDirectory" />
+  </ItemGroup>
+
+</Project>

@@ -25,16 +25,19 @@ public class AttributeProcessor : IDependencyAnalyzer
         INamedTypeSymbol symbol,
         SourceProductionContext context)
     {
-        LogManager.Log($"{LogPrefix}Starting dependency analysis for {symbol.Name}");
+        if (LogManager.IsEnabled)
+            LogManager.Log($"{LogPrefix}Starting dependency analysis for {symbol.Name}");
         var dependencyMap = new Dictionary<string, HashSet<string>>();
 
 
         var autoDependencies = BuildAutoDependencies(symbol);
-        LogManager.Log($"{LogPrefix}Auto dependencies: {string.Join(", ", autoDependencies.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
+        if (LogManager.IsEnabled)
+            LogManager.Log($"{LogPrefix}Auto dependencies: {string.Join(", ", autoDependencies.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
 
         var manualDependencies = BuildManualDependencies(symbol);
-        LogManager.Log($"{LogPrefix}Manual dependencies: {string.Join(", ", manualDependencies
-            .SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
+        if (LogManager.IsEnabled)
+            LogManager.Log($"{LogPrefix}Manual dependencies: {string.Join(", ", manualDependencies
+                .SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
 
         // Merge dependencies and log results
         foreach (var kvp in autoDependencies.Concat(manualDependencies))
@@ -47,7 +50,8 @@ public class AttributeProcessor : IDependencyAnalyzer
             var before = dependencyMap[property].Count;
             dependencyMap[property].UnionWith(kvp.Value);
         }
-        LogManager.Log($"{LogPrefix}Merged dependencies: {string.Join(", ", dependencyMap.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
+        if (LogManager.IsEnabled)
+            LogManager.Log($"{LogPrefix}Merged dependencies: {string.Join(", ", dependencyMap.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key} -> {v}")))}");
 
         return dependencyMap.ToImmutableDictionary(
             kvp => kvp.Key,

@@ -11,6 +11,7 @@ using MVVM.Generator.Attributes;
 using MVVM.Generator.Extraction;
 using MVVM.Generator.Models;
 using MVVM.Generator.Rendering;
+using MVVM.Generator.Utilities;
 
 namespace MVVM.Generator.Generators;
 
@@ -29,10 +30,21 @@ public sealed class ViewModelGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        // Projected to a string first: AnalyzerConfigOptionsProvider itself has
+        // no value equality and combining it directly would invalidate every
+        // model on each compilation.
+        var logPath = context.AnalyzerConfigOptionsProvider
+            .Select(static (provider, _) => LogConfiguration.Resolve(provider));
+
         // Extraction runs once per class, then SelectMany hands each model
         // downstream on its own so an unchanged class skips its output step.
         var models = CollectAttributedClasses(context)
-            .Select(static (symbols, _) => ExtractModels(symbols))
+            .Combine(logPath)
+            .Select(static (pair, _) =>
+            {
+                LogManager.Configure(pair.Right);
+                return ExtractModels(pair.Left);
+            })
             .SelectMany(static (extracted, _) => extracted);
 
         context.RegisterSourceOutput(models, static (spc, model) => Emit(spc, model));
