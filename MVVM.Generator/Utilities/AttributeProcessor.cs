@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -147,7 +147,7 @@ public class AttributeProcessor : IDependencyAnalyzer
             if (member is IFieldSymbol field &&
                 field.GetAttributes().Any(a => a.AttributeClass?.Name == AutoNotifyAttributeName))
             {
-                var propertyName = PropertyGenerator.GetPropertyName(field);
+                var propertyName = Extraction.FieldAttributeReader.GetPropertyName(field);
 
                 map[field.Name] = propertyName;
                 map[propertyName] = propertyName; // Allow direct property name reference
