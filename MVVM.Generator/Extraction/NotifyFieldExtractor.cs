@@ -25,6 +25,7 @@ internal static class NotifyFieldExtractor
     {
         var usings = new List<string>
         {
+            "using System.Collections.Generic;",
             "using System.ComponentModel;",
             "using System.Runtime.CompilerServices;",
         };

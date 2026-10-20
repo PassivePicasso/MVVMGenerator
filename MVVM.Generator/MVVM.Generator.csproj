@@ -2,8 +2,6 @@
 	<PropertyGroup>
 		<TargetFramework>netstandard2.0</TargetFramework>
 		<Nullable>enable</Nullable>
-		<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-		<CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
 		<IsRoslynComponent>true</IsRoslynComponent>
 		<LangVersion>latest</LangVersion>
 		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
@@ -14,7 +12,7 @@
 	</PropertyGroup>
 	<PropertyGroup>
 		<PackageId>MVVM.Generator</PackageId>
-		<Version>4.8.2</Version>
+		<Version>4.8.3</Version>
 		<PackageProjectUrl>https://github.com/PassivePicasso/MVVMGenerator</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<Title>MVVM.Generator</Title>
