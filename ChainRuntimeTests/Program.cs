@@ -58,6 +58,9 @@ internal static class Program
         ReplacedIntermediateMovesSubscription();
         DerivedCollectionNotifies();
         OnlyDependentsOfTheChangedPathNotify();
+        SameValueDoesNotNotify();
+        SameInstanceKeepsSubscriptions();
+        AssigningInOwnChangeHandlerTerminates();
 
         Console.WriteLine(failures == 0
             ? "All chain runtime tests passed."
@@ -187,6 +190,44 @@ internal static class Program
             seen.Contains(nameof(ChainRoot.ReadsLocalFieldAndOneLink)));
         Assert("dependent of other path untouched",
             !seen.Contains(nameof(ChainRoot.ReadsThreeLinks)));
+    }
+
+    private static void SameValueDoesNotNotify()
+    {
+        var root = new ChainRoot();
+        var seen = Watch(root);
+
+        root.LocalField = root.LocalField;
+
+        Assert("same value not notified", seen.Count == 0);
+    }
+
+    private static void SameInstanceKeepsSubscriptions()
+    {
+        var root = new ChainRoot { Middle = new ChainMiddle() };
+        root.Middle = root.Middle;
+        root.Middle.Items = root.Middle.Items;
+
+        var seen = Watch(root);
+        root.Middle.Items.Add("added");
+
+        Assert("same instance keeps one collection subscription",
+            seen.Count(name => name == nameof(ChainRoot.ReadsCollectionCount)) == 1);
+    }
+
+    private static void AssigningInOwnChangeHandlerTerminates()
+    {
+        var leaf = new ChainLeaf();
+        var calls = 0;
+        leaf.PropertyChanged += (_, _) =>
+        {
+            calls++;
+            leaf.Flag = true;
+        };
+
+        leaf.Flag = true;
+
+        Assert("assigning in own change handler terminates", calls == 1);
     }
 
     private static List<string> Watch(INotifyPropertyChanged source)

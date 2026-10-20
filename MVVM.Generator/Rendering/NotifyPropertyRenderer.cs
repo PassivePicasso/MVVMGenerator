@@ -7,8 +7,8 @@ using MVVM.Generator.Models;
 namespace MVVM.Generator.Rendering;
 
 /// <summary>
-/// Renders the notifying property for one [AutoNotify] field. Literals are
-/// carried over unchanged from the previous symbol-based generator.
+/// Renders the notifying property for one [AutoNotify] field. The setter
+/// returns without notifying when the value is unchanged.
 /// </summary>
 internal static class NotifyPropertyRenderer
 {
@@ -125,7 +125,8 @@ internal static class NotifyPropertyRenderer
         {
             {{field.GetterAccess}}get => {{fieldName}};
             {{field.SetterAccess}}set
-            {{{prefix}}
+            {
+                if (EqualityComparer<{{field.TypeName}}>.Default.Equals({{fieldName}}, value)) return;{{prefix}}
                 {{fieldName}} = value;{{suffix}}
                 OnPropertyChanged();{{dependsSuffix}}
             }
